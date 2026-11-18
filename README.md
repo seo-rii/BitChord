@@ -91,7 +91,7 @@
 
 The phone APKs for this fork are in the **BitChord-microG-APK** artifact of a successful [Android microG APK build](https://github.com/seo-rii/BitChord/actions/workflows/microg-apk.yml?query=branch%3Afeat%2Fandroid-microg). Choose <code>arm64-v8a</code> for a modern Android phone or <code>x86_64</code> for a compatible emulator.
 
-On the phone, add your Google account to microG Services or ReVanced GmsCore, open BitChord, and tap **Sign in**. Select the account in the Android chooser and approve YouTube access. BitChord verifies the account with YouTube Music before displaying its library. You can remove it from BitChord's account selector and keep the device account.
+On the phone, add your Google account to microG Services or ReVanced GmsCore, open BitChord, and tap **Sign in**. Select the account in the Android chooser and approve YouTube access. BitChord verifies the account with YouTube Music before displaying its library. You can remove it from BitChord's account selector and keep the device account. Private uploads and age-restricted tracks may still require a playback client that supports the account grant.
 
 The development package is <code>com.dev.bitchord</code>. The artifact includes its signing certificate fingerprint. For reproducible development signing across builds, configure the repository's <code>DEBUG_KEYSTORE_BASE64</code> secret with a standard Android debug keystore. If Google requires Android OAuth client registration, use the package and SHA-1 of the installed APK. microG account and consent traffic uses microG's own network connection. [App-local proxy setup](docs/APP_LOCAL_PROXY.md).
 

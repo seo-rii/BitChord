@@ -44,6 +44,9 @@ import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 import java.io.IOException
 import java.security.MessageDigest
+import java.time.LocalDate
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
 import java.util.Base64
 import java.util.Locale
 
@@ -54,8 +57,8 @@ import java.util.Locale
  * the full YT Music shelf layout and honours the signed-in session. Stream
  * URLs are not fetched here; see [InnerTubeXResolver].
  *
- * Authenticated requests are signed with Google's SAPISIDHASH scheme derived
- * from the stored cookie; no long-lived token is ever minted or stored.
+ * Browser sessions use SAPISIDHASH. OAuth sessions obtain a short-lived token
+ * from the selected account provider when sending an authenticated request.
  */
 object Innertube {
     /**
@@ -1169,7 +1172,12 @@ object Innertube {
         val pageId = pageIdFor(session).takeIf { candidate == null }
         val dataSyncId = dataSyncIdFor(session).takeIf { candidate == null }
         val authUser = authUserFor(session)
-        val clientVersion = session?.clientVersion ?: WEB_REMIX_VERSION
+        // OAuth has no signed-in browser shell from which to read a client version.
+        val clientVersion = if (tokenProvider != null) {
+            "1.${LocalDate.now(ZoneOffset.UTC).format(DateTimeFormatter.BASIC_ISO_DATE)}.01.00"
+        } else {
+            session?.clientVersion ?: WEB_REMIX_VERSION
+        }
         val response = withRetry {
             requestWithToken(tokenProvider) { bearer ->
                 check(candidate != null || source === credentials) { "The active YouTube account changed" }

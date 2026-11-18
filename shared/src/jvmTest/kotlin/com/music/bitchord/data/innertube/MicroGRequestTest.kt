@@ -1,5 +1,6 @@
 package com.music.bitchord.data.innertube
 
+import com.music.bitchord.data.YtMusicRepository
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.ClientRequestException
@@ -69,6 +70,17 @@ class MicroGRequestTest {
         } finally {
             client.close()
             server.shutdown()
+        }
+    }
+
+    @Test fun rejectedCandidateKeepsTheActiveAccount() = runBlocking {
+        Innertube.cookie = "SAPISID=existing"
+        try {
+            val provider = YouTubeTokenProvider { throw IllegalStateException("Grant unavailable") }
+            assertTrue(YtMusicRepository.oauthAccount(provider).isFailure)
+            assertEquals("SAPISID=existing", Innertube.cookie)
+        } finally {
+            Innertube.cookie = null
         }
     }
 

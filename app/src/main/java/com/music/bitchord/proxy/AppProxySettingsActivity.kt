@@ -45,15 +45,19 @@ class AppProxySettingsActivity : ComponentActivity() {
         setContent {
             val importer = rememberWireGuardImportUiState()
             val profileInstalled = WireGuardProfileStore.hasProfile(this@AppProxySettingsActivity)
-            val savedMode = remember {
-                AppProxyStore.read(this@AppProxySettingsActivity).kind
+            val savedRoute = remember {
+                AppProxyStore.read(this@AppProxySettingsActivity)
             }
-            var selectedMode by remember {
-                mutableStateOf(
-                    if (savedMode == AppProxyKind.WIREGUARD_LOCAL) AppProxyKind.WIREGUARD_LOCAL
-                    else AppProxyKind.DIRECT,
-                )
+            val modes = remember {
+                buildList {
+                    add(AppProxyKind.DIRECT)
+                    add(AppProxyKind.WIREGUARD_LOCAL)
+                    if (savedRoute != AppProxyRoute.FAIL_CLOSED && savedRoute.kind !in this) {
+                        add(savedRoute.kind)
+                    }
+                }
             }
+            var selectedMode by remember { mutableStateOf(savedRoute.kind) }
             var restartForMode by remember { mutableStateOf(false) }
             var error by remember { mutableStateOf<String?>(null) }
 
@@ -73,7 +77,7 @@ class AppProxySettingsActivity : ComponentActivity() {
                             style = MaterialTheme.typography.headlineSmall,
                         )
 
-                        for (mode in listOf(AppProxyKind.DIRECT, AppProxyKind.WIREGUARD_LOCAL)) {
+                        for (mode in modes) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -85,11 +89,11 @@ class AppProxySettingsActivity : ComponentActivity() {
                                     onClick = { selectedMode = mode; error = null },
                                 )
                                 Text(
-                                    stringResource(
-                                        if (mode == AppProxyKind.DIRECT)
-                                            R.string.fourpril_proxy_off
-                                        else R.string.fourpril_proxy_wireguard,
-                                    ),
+                                    when (mode) {
+                                        AppProxyKind.DIRECT -> stringResource(R.string.fourpril_proxy_off)
+                                        AppProxyKind.WIREGUARD_LOCAL -> stringResource(R.string.fourpril_proxy_wireguard)
+                                        else -> "${mode.name} (${savedRoute.host}:${savedRoute.port})"
+                                    },
                                 )
                             }
                         }
@@ -120,6 +124,7 @@ class AppProxySettingsActivity : ComponentActivity() {
 
                         Button(
                             modifier = Modifier.fillMaxWidth(),
+                            enabled = selectedMode in modes && !importer.importing,
                             onClick = {
                                 if (selectedMode == AppProxyKind.WIREGUARD_LOCAL &&
                                     !WireGuardProfileStore.hasProfile(this@AppProxySettingsActivity)
@@ -129,10 +134,13 @@ class AppProxySettingsActivity : ComponentActivity() {
                                     try {
                                         AppProxyStore.save(
                                             this@AppProxySettingsActivity,
-                                            if (selectedMode == AppProxyKind.DIRECT) AppProxyRoute.DIRECT
-                                            else AppProxyRoute(
-                                                AppProxyKind.WIREGUARD_LOCAL, "127.0.0.1", 9,
-                                            ),
+                                            when (selectedMode) {
+                                                AppProxyKind.DIRECT -> AppProxyRoute.DIRECT
+                                                AppProxyKind.WIREGUARD_LOCAL -> AppProxyRoute(
+                                                    AppProxyKind.WIREGUARD_LOCAL, "127.0.0.1", 9,
+                                                )
+                                                else -> savedRoute
+                                            },
                                         )
                                         restartForMode = true
                                     } catch (_: Exception) {

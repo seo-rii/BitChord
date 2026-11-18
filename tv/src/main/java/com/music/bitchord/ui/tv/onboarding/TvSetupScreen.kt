@@ -1,5 +1,6 @@
 package com.music.bitchord.ui.tv.onboarding
 
+import android.content.Intent
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
@@ -40,11 +41,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.music.bitchord.R
+import com.music.bitchord.proxy.AppProxySettingsActivity
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.settings.TvSettings
 import com.music.bitchord.ui.MainViewModel
@@ -76,6 +81,7 @@ fun TvSetupScreen(
     onComplete: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
     var step by remember { mutableStateOf(SetupStep.Welcome) }
     var theme by remember { mutableStateOf(AppThemeOption.fromId(TvSettings.tvTheme.value)) }
 
@@ -109,6 +115,9 @@ fun TvSetupScreen(
                 hero = { TvAppMark(size = 106.dp) },
             ) {
                 TvSetupButton("Continue", initialFocus = true) { step = SetupStep.SignIn }
+                TvSetupButton(stringResource(R.string.fourpril_proxy_settings_title)) {
+                    context.startActivity(Intent(context, AppProxySettingsActivity::class.java))
+                }
                 TvSetupButton("Set Up Later") { finish() }
             }
             SetupStep.SignIn -> TvSignInStep(

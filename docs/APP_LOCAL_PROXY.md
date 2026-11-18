@@ -1,107 +1,27 @@
-# BitChord Android app-local proxy: Phase 1
+# App-local proxy on Android
 
-Status: experimental / build and real-device validation pending. The project is based on BitChord v1.9.1 and ships a direct-install debug APK through Actions.
+On first launch, BitChord offers **Find WireGuard .conf file** and **Continue without WireGuard** before account setup. A fresh install without a profile uses the device’s normal connection. You can also open **Proxy** from the signed-out Home screen or Settings. On Android TV, **Proxy** is available from the welcome screen and Settings.
 
-- Proxy options: Built-in WireGuard (default), Direct (explicit opt-out), HTTP, SOCKS5. On a clean install, missing .conf fails closed; import a .conf then restart to enable requests.
-- Users can configure proxy host/port under Settings > Audio quality > App-local proxy. Restart is required for changes.
-- The shared OkHttp client is used by the upstream API playback resolver, Media3 audio source and downloader. The Coil image fetcher is created from the same configured client.
-- Google sign-in WebView has a separate proxy override, applied before loading a login page. If the override is unsupported, login is blocked instead of silently bypassing the proxy.
-- An invalid stored proxy selection is mapped to an inaccessible localhost port. Changes to a proxy require restarting the process.
-- The application does not use VpnService.
+## Set up WireGuard
 
-### 4pril UI additions
-- Original BitChord streaming engines, source policy, audio cache, quality upgrades and crossfade remain unchanged.
-- Settings > Miscellaneous: "Open full player on song tap". Default OFF preserves the upstream mini-player-first behavior; enabled opens Now Playing for album/playlist/search song selections.
-- Mini-player swipes: UP opens Now Playing, LEFT/RIGHT changes tracks, DOWN at least 72dp calls Media3 pause + stop + clearMediaItems so playback ends and the mini-player disappears. Works on both standard and Liquid Glass mini-player.
-- Playing song's overflow menu offers removal from the **originating** owned playlist only if the per-entry setVideoId is known, preventing accidental removal of another duplicate entry.
-- Listen Together control lock guards the downward stop gesture.
-- Upstream's LocaleStringsTest currently fails on incomplete localization catalogs; CI reports unit-test failures separately from APK assembly.
+1. Select a WireGuard `.conf` file with the Android document picker.
+2. BitChord validates the file and saves it encrypted in its private, backup-excluded directory. Android Keystore holds the encryption key.
+3. Confirm the restart. BitChord starts the tunnel before initializing its shared network client. The phone welcome then advances to the name step.
 
-### Runtime verification limits
-The userspace WireGuard JNI library and encrypted .conf import are integrated into the build. This remains an experimental app-local proxy rather than a system VPN or full kill switch. Google-login WebView 407 authentication, provider-specific WebView support, DNS/egress IP, and uncovered third-party networking clients all require on-device validation.
+If the selected profile is missing or the tunnel cannot start, the music client keeps the protected route blocked. Import another profile or choose **Proxy → Off → Apply** and confirm the restart to use the normal connection. Earlier installations with a saved HTTP or SOCKS5 endpoint keep that route until another is selected.
 
-### Reference for Phase 2
-- https://github.com/04pril/morphe-wireguard-patches
-- https://github.com/seo-rii/morphe-patches/tree/feat/wireguard-i18n-custom/native/wireguard
-- https://github.com/04pril/BitChord-iOS/blob/main/docs/PROXY.md
+## Network coverage
 
-The Morphe WireGuard implementation exposes an authenticated loopback HTTP/CONNECT server. It must be built from its Go sources for Android ABI arm64-v8a and x86_64, packaged as a shared library, loaded by JNI, and integrated with Android lifecycle, Keystore and network clients. Its loopback proxy MUST require authentication: other installed apps can connect to localhost. Keep GPL-3.0 and third-party NOTICE files.
+The embedded userspace WireGuard engine runs an authenticated HTTP proxy on a random loopback port. The shared OkHttp client uses it for YouTube Music API requests, Media3 streaming, and downloads. The artwork loader also uses this client. BitChord leaves the Android VPN slot available to other apps.
 
-### Device test plan
-1. No proxy: startup, login, browsing, playback, downloads and artwork.
-2. HTTP/SOCKS5: verify YouTube API and googlevideo traffic follow the proxy.
-3. Stop proxy server: verify intercepted calls do not reconnect directly.
-4. Ensure actual Google login WebView works through the proxy.
-5. Invalid configuration blocks traffic and direct mode can be restored.
-6. Validate HTTPS, IPv4/IPv6, connectivity switches, cached audio and other clients.
+microG runs as a separate Android application. Its account and consent requests follow its own connection settings. To route microG’s traffic as well, configure a device-level VPN that includes microG.
 
+A running local proxy confirms that BitChord can connect to its listener. To verify remote tunnel connectivity, check the WireGuard peer handshake and traffic while streaming on the device. The embedded engine supports `arm64-v8a` and `x86_64`.
 
-## Built-in WireGuard and Google login WebView (2026-11-17)
-- The v1.9.1 app already has an in-app Google login WebView; no external browser or Morphe patcher is used.
-- Settings > Audio quality > App-local proxy supports importing a .conf via SAF. Configuration is validated using the pinned native engine and stored AES-GCM encrypted in noBackupFilesDir with its key in AndroidKeyStore.
-- Select Built-in WireGuard and fully restart BitChord. The native Go engine binds an authenticated random localhost port; a per-process random token is used for OkHttp proxy challenges. The Android VPN slot is untouched.
-- Before the login WebView starts, an AndroidX WebKit process-wide proxy override is applied, with implicit localhost-bypass rules removed. A 5-second timeout and native-startup check fail closed.
-- WebViewClient answers HTTP-auth challenges **only** when host=127.0.0.1 and realm=App WireGuard. On a 407 or proxy connection error, it blocks login rather than bypassing. **Not all WebView providers expose proxy 407 challenges to this callback; real-device Android WebView compatibility is unverified.** A successful Google login alone does not prove tunneled IP — independently verify DNS and egress IP on-device.
-- Native build uses Go 1.26.10 and NDK 28.2.13676358; no binary artifact is claimed until GitHub Actions compiles and packages the .so.
-- Protected network paths still need on-device validation (including Google sign-in, cookies/redirects, playback, and download). No system-wide kill switch is claimed.
+## Player controls inherited from the fork
 
+- Tapping a song opens Now Playing by default. Turn off **Open full player when tapping a song** to start in the mini-player.
+- Swipe the mini-player down to stop playback and clear the queue. A short or canceled drag returns it to its original position. Listen Together’s host control lock also applies to this gesture.
+- The current track’s menu can remove its entry from the originating playlist when the user owns that playlist and BitChord knows the entry ID.
 
-## Default WireGuard radio and dark theme (2026-11-17)
-- On a fresh install, the second radio **Built-in WireGuard** is the default, not Direct. No .conf means blocked app networking until import; this is deliberate fail-closed behavior.
-- Existing early-test installations with a saved .conf and previous implicit/explicit DIRECT mode are migrated ONCE to Built-in WireGuard. Saved HTTP/SOCKS5 choices remain untouched. After migration, a user's explicit Off selection is respected across restarts.
-- Successful `.conf` import automatically saves the WireGuard mode and updates the selected radio. A full process restart is still required to activate it.
-- The settings activity uses a dark/light Compose Material3 color scheme plus a Surface so labels remain visible with the system's dark theme.
-
-
-## Player UI responsiveness (2026-11-17)
-- Original audio/resolver/queue logic is unchanged. For a song tap with the full-player preference enabled, the host opens the sheet **synchronously**, presenting a temporary metadata-only tap preview while the existing Media3 queue is built. A matching live player item replaces the preview; a 4s fail-safe clears stale previews.
-- Downward mini-player gestures now track the finger at draw time, translating down and shrinking smoothly (up to 26%) with a subtle fade. If released before the original 72dp stop threshold, the pill springs back. If released past the threshold, it finishes a 190ms ease-out and only then calls pause+stop+clearMediaItems. Works through the shared detector on normal and Liquid Glass mini-players; locked Listen Together controls rebound rather than stopping.
-- Playlist deletion was confirmed functional by the tester and is intentionally untouched in this revision.
-
-
-## Onboarding login: configure WireGuard first (2026-11-17)
-- On the initial `Connect to YouTube Music` welcome screen, a `Configure WireGuard / proxy` button now appears **above** the Google sign-in button. It opens the existing built-in settings activity to import a WireGuard .conf and select mode, rather than any external login browser or patcher.
-- The welcome flow remains after returning from settings; the user can fully restart BitChord (process restart, not activity-only) before Google login to activate the mode. The UI gives a short Korean/English restart notice.
-- The Google login WebView now refuses to start if the persisted proxy mode/endpoint differs from the already-frozen process route, preventing Google authentication from silently using the old direct connection immediately after changing a proxy in onboarding.
-- If WireGuard was selected but native startup has not succeeded, the WebView is also blocked rather than opening a direct route. Real-device WebView 407 auth and external IP verification are still required.
-
-
-## Signed-out Home: Proxy button next to Google sign-in (2026-11-17)
-- When Home is shown without a signed-in Google account, the existing mesh login banner now has **two independent pills in one row**: `Sign in with Google` and a compact `Proxy / 프록시` button to its right.
-- The new button opens the same built-in WireGuard/HTTP/SOCKS5 editor as Settings and the first-run welcome screen. It does not open a separate browser.
-- The signed-in Home banner stays absent. SharedUi callers without a proxy callback retain their original single-action banner behavior.
-- Changing mode or importing a WireGuard .conf needs a full BitChord process restart before Google login; the WebView guard prevents a stale route from silently connecting directly.
-
-
-## Automatic full-process restart after .conf import
-- After a **successful** WireGuard .conf import, native validation and encrypted AtomicFile write, automatically persist Built-in WireGuard mode using synchronous SharedPreferences.commit() (never a pending async .apply()).
-- Show a non-dismissible localized Material3 AlertDialog: "프록시 적용을 위해 앱을 재시작합니다." / "알겠습니다". No cancel/back/outside-dismiss action. Failed/canceled imports never restart.
-- Confirmation opens a one-shot, nonexported `:proxy_relaunch` Activity in a distinct process, which terminates the old main process and launches the app's MainActivity as a new process. This guarantees AppWireGuard.startAtProcessLaunch can load the newly stored profile, rather than only recreating the Activity with the old frozen Http/WebView transport.
-- BitChordApplication skips normal startup work in the short-lived relaunch helper process. This is not an Android system VPN and no WireGuard handshake/Google-login egress verification is implied.
-- Other changes made by tapping Save without importing a profile continue to require a full process restart.
-
-
-## Proxy-first welcome screen (2026-11-17)
-- First install onboarding sequence: **Proxy setup -> Listen Together name -> Google sign-in**, not the original name-first order.
-- A dedicated first screen shows one prominent "WireGuard / 프록시 먼저 설정" button, the network privacy explanation, and restart instructions; it opens the same built-in profile importer.
-- On successful .conf import the non-dismissible "알겠습니다" dialog launches a separate relaunch process; the new main process starts WireGuard before onboarding is composed. If selected profile exists and native local listener started, onboarding **starts directly at the name step**, so the user does not need to import twice.
-- If WireGuard is absent/unready, the first screen remains available to correct the profile; it does not mistakenly show Google sign-in over an old DIRECT connection. A user explicitly selecting Direct or HTTP/SOCKS5 must ensure a full process restart before advancing, so the applied route matches the choice.
-- The previously added proxy button alongside Google sign-in on the welcome ConnectPage is removed because the separate first step now covers setup. The signed-out Home banner's proxy shortcut remains unchanged.
-- The login WebView retains its route-readiness and fail-closed checks. A running local listener alone does **not** prove successful remote WireGuard handshake or that Google login egress is tunneled; this still needs actual device tests.
-
-
-## Compact WireGuard settings and direct .conf onboarding (2026-11-17)
-- The in-app proxy editor now has exactly two selectable modes: Off and Use WireGuard proxy. The former HTTP and SOCKS5 radio choices, host/port inputs and explanatory paragraphs are removed from the UI. A small encrypted-profile status, .conf import button and Apply button remain. Selecting a mode and applying triggers the same process-restart confirmation.
-- The first-install onboarding no longer opens AppProxySettingsActivity. Its single CTA is now "WireGuard .conf 파일 찾기", wired directly to the SAF document picker registered by the MainActivity Compose tree.
-- SAF picks by MIME and cannot guarantee a filename extension-only visible list. To avoid hiding valid .conf files with provider-dependent MIME, the picker allows all MIME types, but **only a document with OpenableColumns.DISPLAY_NAME ending in .conf** (case insensitive) is accepted. Invalid file extensions are rejected BEFORE reading, parsing or storing; no restart occurs.
-- After .conf native validation and AndroidKeyStore-encrypted write, the shared importer persists WireGuard mode synchronously, shows the mandatory "프록시 적용을 위해 앱을 재시작합니다." / "알겠습니다" dialog and uses the separate process relaunch. Import behavior and failure semantics are identical from onboarding and the regular proxy editor.
-- Existing playback engine, Google login WebView proxy routing, main tab login+proxy buttons, and mini-player animation are unchanged.
-
-
-## R8-optimized APK + mini-player/nav merge (2026-11-17)
-- **No edits** to upstream Liquid Glass, Haze/blur, bottom navigation animations or audio engine. The existing Compose draw-only mini-player gesture layer is the only animated code changed.
-- Down-swipe destination is the nearby floating tab pill: ~68dp in standard/expanded mode, ~44dp in inline Liquid Glass, versus the previous 224dp offscreen throw. An intentional 36dp drag commits stop; release uses a stiff 780f/0.82 spring and late squash/fade into the nav pill. A cancelled drag springs back at 640f/0.74. Media3 stop+clear remains delayed until after the merge.
-- New song-tap -> full player preference defaults ON only if no saved setting exists. Saved user ON/OFF values are respected.
-- A new Gradle `optimized` buildType copies the unchanged upstream `release` R8 minification/resource shrinking settings, and uses test debug signing without changing `com.dev.bitchord` package ID. CI assembles `app:assembleDevOptimized` and publishes **R8-OPT**-named APKs instead of the slower `devDebug`.
-- GitHub-hosted debug signing certificates can differ across builds; an install "app not installed"/signature conflict may require uninstalling the older build. Export/reimport the WireGuard .conf as necessary because uninstalling removes saved settings and AndroidKeyStore keys. A persistent signing key in GitHub secrets is preferable for stable updates, but is not configured by this change.
-- Build success is not a measured FPS improvement. Test on device: visible UI frame pacing, R8 compatibility, Google sign-in, proxy tunnel startup and playback.
+The Android integration originated in the [04pril fork](https://github.com/04pril/BitChord-Android/tree/feat/app-local-proxy). The JNI source and third-party licenses are available at the [pinned WireGuard revision](https://github.com/seo-rii/morphe-patches/tree/d03b7439f517eeed13d12edc1f922ee0e640cd13/native/wireguard).

@@ -151,6 +151,18 @@
           uiMode is deliberately *not* in the list: a day/night change should
           still recreate the Activity so the theme is rebuilt from resources.
         -->
+        <activity
+            android:name=".proxy.AppProxySettingsActivity"
+            android:exported="false"
+            android:theme="@style/Theme.BitChord" />
+        <activity
+            android:name=".proxy.AppProxyRelaunchActivity"
+            android:exported="false"
+            android:process=":proxy_relaunch"
+            android:taskAffinity=""
+            android:excludeFromRecents="true"
+            android:theme="@style/Theme.BitChord" />
+
         <!--
           MainActivity is still what the shared code names — the playback
           notification, the widgets — so on TV that name is the TV interface.

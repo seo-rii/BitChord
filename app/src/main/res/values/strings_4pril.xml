@@ -2,11 +2,12 @@
     <string name="fourpril_open_full_player_on_tap">Open full player when tapping a song</string>
     <string name="fourpril_open_full_player_on_tap_subtitle">Off: start in mini-player. On: open Now Playing immediately.</string>
     <string name="fourpril_onboarding_proxy_title">Set up WireGuard</string>
-    <string name="fourpril_onboarding_proxy_intro">Choose a WireGuard .conf file to protect music playback and Google sign-in within BitChord.</string>
+    <string name="fourpril_onboarding_proxy_intro">Choose a WireGuard .conf file to route BitChord’s music requests through your tunnel.</string>
+    <string name="fourpril_continue_without_proxy">Continue without WireGuard</string>
     <string name="fourpril_onboarding_proxy_setup">Set up WireGuard / proxy first</string>
     <string name="fourpril_onboarding_proxy_restart_hint">After importing, tap OK to restart and continue with your name.</string>
     <string name="fourpril_home_proxy_button">Proxy</string>
-    <string name="fourpril_proxy_restart_title">WireGuard profile saved</string>
+    <string name="fourpril_proxy_restart_title">Proxy settings saved</string>
     <string name="fourpril_proxy_restart_message">BitChord will restart to apply the proxy settings.</string>
     <string name="fourpril_proxy_restart_confirm">OK</string>
     <string name="fourpril_proxy_settings_title">Proxy</string>

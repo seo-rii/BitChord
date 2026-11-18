@@ -104,6 +104,8 @@ fun OnboardingScreen(
      * and this begins at the name step instead of looping through setup again.
      */
     proxyReady: Boolean,
+    usingDirectConnection: Boolean,
+    onOpenProxySettings: () -> Unit,
     /** Saves the party name, called after the proxy-first setup. */
     onNameChosen: (String) -> Unit,
     /** Opens the Google sign-in. The caller finishes onboarding once it lands. */
@@ -116,7 +118,7 @@ fun OnboardingScreen(
     modifier: Modifier = Modifier,
 ) {
     var page by rememberSaveable {
-        mutableIntStateOf(if (proxyReady) PAGE_NAME else PAGE_PROXY)
+        mutableIntStateOf(if (proxyReady && !usingDirectConnection) PAGE_NAME else PAGE_PROXY)
     }
     var name by rememberSaveable { mutableStateOf(initialName) }
     val focusManager = LocalFocusManager.current
@@ -186,8 +188,12 @@ fun OnboardingScreen(
                         onPickWireGuardConf = onPickWireGuardConf,
                         importError = confImportError,
                         importing = confImporting,
-                        onNext = { if (proxyReady) page = PAGE_NAME },
-                        proxyReady = proxyReady,
+                        continueLabel = when {
+                            !proxyReady -> R.string.fourpril_proxy_settings_title
+                            usingDirectConnection -> R.string.fourpril_continue_without_proxy
+                            else -> R.string.onboarding_next
+                        },
+                        onNext = { if (proxyReady) page = PAGE_NAME else onOpenProxySettings() },
                     )
                     PAGE_NAME -> NamePage(
                         name = name,
@@ -225,21 +231,14 @@ private fun OnboardingPage(content: @Composable ColumnScope.() -> Unit) {
     }
 }
 
-/**
- * First-run entry point. It intentionally has one primary action and no
- * Google-login or name controls; the app's network route must be configured
- * before either the first account request or a streaming API request.
- *
- * Importing a .conf shows the mandatory "알겠습니다" process-restart dialog.
- * After relaunch, proxyReady is true and the welcome resumes at NamePage.
- */
+/** Offer the import before account setup and keep proxy settings reachable if startup failed. */
 @Composable
 private fun ColumnScope.ProxyPage(
     onPickWireGuardConf: () -> Unit,
     importError: String?,
     importing: Boolean,
     onNext: () -> Unit,
-    proxyReady: Boolean,
+    continueLabel: Int,
 ) {
     Spacer(Modifier.height(56.dp))
     Image(
@@ -285,16 +284,13 @@ private fun ColumnScope.ProxyPage(
         textAlign = TextAlign.Center,
         modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp),
     )
-    if (proxyReady) {
-        // The user returned here from Name via Back after setup succeeded.
-        // No new import is needed; let them resume account setup.
-        Spacer(Modifier.height(16.dp))
-        PillButton(
-            label = stringResource(R.string.onboarding_next),
-            onClick = onNext,
-            primary = false,
-        )
-    }
+    Spacer(Modifier.height(16.dp))
+    PillButton(
+        label = stringResource(continueLabel),
+        onClick = onNext,
+        primary = false,
+        enabled = !importing,
+    )
     Spacer(Modifier.height(16.dp))
 }
 

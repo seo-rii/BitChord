@@ -1,5 +1,6 @@
 package com.music.bitchord.ui.tv.screens
 
+import android.content.Intent
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -24,8 +25,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.music.bitchord.R
+import com.music.bitchord.proxy.AppProxySettingsActivity
 import com.music.bitchord.BuildConfig
 import com.music.bitchord.data.AppUpdateChecker
 import com.music.bitchord.data.settings.AppSettings
@@ -68,6 +73,7 @@ fun TvSettingsScreen(
     modifier: Modifier = Modifier,
 ) {
     TvChromePinned()
+    val context = LocalContext.current
     val signedIn by viewModel.signedIn.collectAsState()
     val account by viewModel.account.collectAsState()
 
@@ -139,6 +145,14 @@ fun TvSettingsScreen(
                     value = if (signedIn) account?.name ?: "Signed In" else "Sign In",
                     onFocused = { blurb = "Your library, playlists and recommendations come from this account." },
                     onClick = onOpenAccount,
+                )
+            }
+
+            item {
+                TvListRow(
+                    title = stringResource(R.string.fourpril_proxy_settings_title),
+                    onFocused = { blurb = "Choose the connection BitChord uses to play music." },
+                    onClick = { context.startActivity(Intent(context, AppProxySettingsActivity::class.java)) },
                 )
             }
 

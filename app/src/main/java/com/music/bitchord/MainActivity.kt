@@ -5393,6 +5393,11 @@ private fun BitChordApp(
                 initialName = remember {
                     ListenTogether.nickname().ifBlank { account?.name.orEmpty() }
                 },
+                usingDirectConnection = com.music.bitchord.data.Http.configuredRoute.kind ==
+                    com.music.bitchord.data.AppProxyKind.DIRECT,
+                onOpenProxySettings = {
+                    context.startActivity(Intent(context, com.music.bitchord.proxy.AppProxySettingsActivity::class.java))
+                },
                 proxyReady = remember {
                     // These values are latched at Application.onCreate.
                     // A .conf import alone doesn't make the old process safe
@@ -5406,7 +5411,7 @@ private fun BitChordApp(
                                 active.kind == com.music.bitchord.data.AppProxyKind.WIREGUARD_LOCAL
                         com.music.bitchord.data.AppProxyKind.DIRECT ->
                             active.kind == com.music.bitchord.data.AppProxyKind.DIRECT
-                        else -> active == selected
+                        else -> selected != com.music.bitchord.data.AppProxyRoute.FAIL_CLOSED && active == selected
                     }
                 },
                 onNameChosen = ListenTogether::setNickname,

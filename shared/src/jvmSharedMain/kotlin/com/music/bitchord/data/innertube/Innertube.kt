@@ -16,6 +16,7 @@ import io.ktor.client.request.parameter
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
+import io.ktor.http.Url
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import io.ktor.serialization.kotlinx.json.json
@@ -100,24 +101,44 @@ object Innertube {
 
     private const val TAG = "BitChord"
 
-    /** Session cookie captured by the login WebView; null = browse as guest. */
-    var cookie: String? = null
+    private sealed interface Credentials {
+        class Browser(val cookie: String) : Credentials
+        class OAuth(val accountId: String, val provider: YouTubeTokenProvider) : Credentials
+    }
+
+    @Volatile
+    private var credentials: Credentials? = null
+
+    /** Setting the legacy browser cookie also ends any active OAuth session. */
+    var cookie: String?
+        get() = (credentials as? Credentials.Browser)?.cookie
         set(value) {
-            if (field != value) {
-                // Both belong to the session that just left. A scope kept across
-                // a sign-in would credit the new account's plays to the old one,
-                // and a visitor id minted under the old session is not bound to
-                // the new one — see [SessionScope] and [visitorData].
-                scope = null
-                visitorData = null
-                visitorDataIsSessionBound = false
-                // The chosen channel belonged to the account that just left.
-                // A `dataSyncId` from one login sent under another's cookie is
-                // answered with 401 on every request, so it goes with it.
-                channelOverride = null
-            }
-            field = value
+            val cookie = value?.takeIf { it.isNotBlank() }
+            if (credentials !is Credentials.OAuth && this.cookie == cookie) return
+            replaceCredentials(cookie?.let { Credentials.Browser(it) })
         }
+
+    /** Identifies the active session for account-specific in-memory caches. */
+    val sessionKey: String?
+        get() = when (val current = credentials) {
+            is Credentials.Browser -> current.cookie
+            is Credentials.OAuth -> current.accountId
+            null -> null
+        }
+
+    val isSignedIn: Boolean get() = credentials != null
+
+    fun useOAuth(accountId: String, provider: YouTubeTokenProvider) {
+        replaceCredentials(Credentials.OAuth(accountId, provider))
+    }
+
+    private fun replaceCredentials(value: Credentials?) {
+        scope = null
+        visitorData = null
+        visitorDataIsSessionBound = false
+        channelOverride = null
+        credentials = value
+    }
 
     /**
      * Google's per-session visitor id.
@@ -477,6 +498,8 @@ object Innertube {
             connectTimeoutMillis = 15_000
             socketTimeoutMillis = 20_000
         }
+        // Credentialed requests have fixed destinations. Never replay their headers on a redirect.
+        followRedirects = false
         expectSuccess = true
     }
 
@@ -549,6 +572,10 @@ object Innertube {
 
     /** Signed-in profile: display name, email/handle and avatar. */
     suspend fun accountMenu(): JsonObject = postMusic("account/account_menu") {}
+
+    /** Validate the account picker result without changing any active listener state. */
+    internal suspend fun oauthAccountMenu(provider: YouTubeTokenProvider): JsonObject =
+        postMusic("account/account_menu", candidate = provider) {}
 
     /**
      * Every channel this session can act as, as Innertube's account switcher
@@ -713,7 +740,7 @@ object Innertube {
      * timestamp one revision old, it does not.
      */
     suspend fun playbackTracking(videoId: String, signatureTimestamp: Int?): PlaybackTracking? {
-        if (cookie == null) return null
+        if (!isSignedIn) return null
         ensureSessionScope()
         val response = postMusic("player") {
             put("videoId", videoId)
@@ -804,11 +831,7 @@ object Innertube {
         // Playback can outlive the Activity that restored the session. Ensure
         // the selected profile's headers exist before this first history ping.
         if (cookie != null) ensureSessionScope()
-        val session = scope
-        return client.get(baseUrl) {
-            parameter("cpn", cpn)
-            statsHeaders(session)
-        }.status.value
+        return getStats(baseUrl) { parameter("cpn", cpn) }
     }
 
     /** Shared shape of the s.youtube.com stats pings, including session auth. */
@@ -818,8 +841,7 @@ object Innertube {
         extras: HttpRequestBuilder.() -> Unit,
     ): Int {
         if (cookie != null) ensureSessionScope()
-        val session = scope
-        return client.get(baseUrl) {
+        return getStats(baseUrl) {
             parameter("ver", "2")
             parameter("c", "WEB_REMIX")
             parameter("cver", webRemixVersion)
@@ -834,8 +856,22 @@ object Innertube {
             parameter("hl", currentLanguage.replace('-', '_'))
             parameter("cr", currentRegion)
             extras()
-            statsHeaders(session)
-        }.status.value
+        }
+    }
+
+    private suspend fun getStats(baseUrl: String, parameters: HttpRequestBuilder.() -> Unit): Int {
+        val target = Url(baseUrl)
+        require(isYouTubeStatsUrl(target)) { "Unexpected playback tracking destination" }
+        val source = credentials
+        val session = scope
+        return requestWithToken((source as? Credentials.OAuth)?.provider) { bearer ->
+            check(source === credentials) { "The active YouTube account changed" }
+            client.get(target) {
+                parameters()
+                statsHeaders(session, (source as? Credentials.Browser)?.cookie)
+                bearer?.let { bearerHeaders(it) }
+            }.status.value
+        }
     }
 
     /**
@@ -844,7 +880,7 @@ object Innertube {
      * player response; sending fewer is what makes a ping land somewhere other
      * than the listener's own history.
      */
-    private fun HttpRequestBuilder.statsHeaders(session: SessionScope?) {
+    private fun HttpRequestBuilder.statsHeaders(session: SessionScope?, cookie: String?) {
         header("X-Origin", MUSIC_ORIGIN)
         header("Origin", MUSIC_ORIGIN)
         header("Referer", "$MUSIC_ORIGIN/")
@@ -869,7 +905,7 @@ object Innertube {
     class NotSignedInException : IllegalStateException("Sign in to YouTube Music to do that")
 
     private fun requireSession() {
-        if (cookie == null) throw NotSignedInException()
+        if (!isSignedIn) throw NotSignedInException()
     }
 
     /**
@@ -1117,68 +1153,80 @@ object Innertube {
         query: Map<String, String> = emptyMap(),
         /** The context's `gl`; null sends none. */
         region: String? = currentRegion,
+        candidate: YouTubeTokenProvider? = null,
         bodyExtras: JsonObjectBuilder.() -> Unit,
     ): JsonObject {
         // This is the common authenticated request path: Home, Library,
         // likes, playlists, account menus and all their continuations pass
         // through it. Waiting here makes restoration process-wide rather than
         // a special case implemented by whichever screen happened to open.
-        if (cookie != null) ensureSessionScope()
-        val session = scope
-        val clientVersion = webRemixVersion
+        val source = credentials
+        if (candidate == null && source is Credentials.Browser) ensureSessionScope()
+        val cookie = (source as? Credentials.Browser)?.cookie?.takeIf { candidate == null }
+        val tokenProvider = candidate ?: (source as? Credentials.OAuth)?.provider
+        val session = scope.takeIf { candidate == null }
+        val visitor = visitorData.takeIf { candidate == null }
+        val pageId = pageIdFor(session).takeIf { candidate == null }
+        val dataSyncId = dataSyncIdFor(session).takeIf { candidate == null }
+        val authUser = authUserFor(session)
+        val clientVersion = session?.clientVersion ?: WEB_REMIX_VERSION
         val response = withRetry {
-            client.post("$MUSIC_BASE/$endpoint") {
-                contentType(ContentType.Application.Json)
-                parameter("prettyPrint", "false")
-                parameter("hl", currentLanguage)
-                header("Accept-Language", acceptLanguageHeader)
-                query.forEach { (key, value) -> parameter(key, value) }
-                header("X-Origin", MUSIC_ORIGIN)
-                header("Origin", MUSIC_ORIGIN)
-                header("Referer", "$MUSIC_ORIGIN/")
-                // Stats pings are only honoured for a session Google recognises
-                // as a real client, so identify as one here too — the visitor
-                // id is minted on the first call and reused for the session.
-                header("X-YouTube-Client-Name", WEB_REMIX_CLIENT_ID)
-                header("X-YouTube-Client-Version", clientVersion)
-                visitorData?.let { header("X-Goog-Visitor-Id", it) }
-                cookie?.let { c ->
-                    header("Cookie", c)
-                    // Which account in the jar, and which brand channel of it.
-                    // Both were fixed at "the first one" before — see
-                    // [SessionScope].
-                    header("X-Goog-AuthUser", authUserFor(session))
-                    pageIdFor(session)?.let { header("X-Goog-PageId", it) }
-                    sapisidFrom(c)?.let { header("Authorization", sapisidHash(it)) }
-                }
-                setBody(
-                    buildJsonObject {
-                        putJsonObject("context") {
-                            putJsonObject("client") {
-                                put("clientName", "WEB_REMIX")
-                                put("clientVersion", clientVersion)
-                                put("hl", currentLanguage)
-                                region?.let { put("gl", it) }
-                                visitorData?.let { put("visitorData", it) }
+            requestWithToken(tokenProvider) { bearer ->
+                check(candidate != null || source === credentials) { "The active YouTube account changed" }
+                client.post("$MUSIC_BASE/$endpoint") {
+                    contentType(ContentType.Application.Json)
+                    parameter("prettyPrint", "false")
+                    parameter("hl", currentLanguage)
+                    header("Accept-Language", acceptLanguageHeader)
+                    query.forEach { (key, value) -> parameter(key, value) }
+                    header("X-Origin", MUSIC_ORIGIN)
+                    header("Origin", MUSIC_ORIGIN)
+                    header("Referer", "$MUSIC_ORIGIN/")
+                    // Stats pings are only honoured for a session Google recognises
+                    // as a real client, so identify as one here too — the visitor
+                    // id is minted on the first call and reused for the session.
+                    header("X-YouTube-Client-Name", WEB_REMIX_CLIENT_ID)
+                    header("X-YouTube-Client-Version", clientVersion)
+                    visitor?.let { header("X-Goog-Visitor-Id", it) }
+                    cookie?.let { c ->
+                        header("Cookie", c)
+                        // Which account in the jar, and which brand channel of it.
+                        // Both were fixed at "the first one" before — see
+                        // [SessionScope].
+                        header("X-Goog-AuthUser", authUser)
+                        sapisidFrom(c)?.let { header("Authorization", sapisidHash(it)) }
+                    }
+                    bearer?.let { bearerHeaders(it) }
+                    pageId?.let { header("X-Goog-PageId", it) }
+                    setBody(
+                        buildJsonObject {
+                            putJsonObject("context") {
+                                putJsonObject("client") {
+                                    put("clientName", "WEB_REMIX")
+                                    put("clientVersion", clientVersion)
+                                    put("hl", currentLanguage)
+                                    region?.let { put("gl", it) }
+                                    visitor?.let { put("visitorData", it) }
+                                }
+                                putJsonObject("user") {
+                                    put("lockedSafetyMode", false)
+                                    // Only ever a value read back from a shell that
+                                    // said it was signed in: Google answers an
+                                    // `onBehalfOfUser` it cannot tie to the cookie
+                                    // with 401, so a guess here would take the
+                                    // whole app down rather than just history.
+                                    dataSyncId?.let { put("onBehalfOfUser", it) }
+                                }
+                                putJsonObject("request") { put("useSsl", true) }
                             }
-                            putJsonObject("user") {
-                                put("lockedSafetyMode", false)
-                                // Only ever a value read back from a shell that
-                                // said it was signed in: Google answers an
-                                // `onBehalfOfUser` it cannot tie to the cookie
-                                // with 401, so a guess here would take the
-                                // whole app down rather than just history.
-                                dataSyncIdFor(session)?.let { put("onBehalfOfUser", it) }
-                            }
-                            putJsonObject("request") { put("useSsl", true) }
-                        }
-                        bodyExtras()
-                    },
-                )
-            }.body<JsonObject>()
+                            bodyExtras()
+                        },
+                    )
+                }.body<JsonObject>()
+            }
         }
 
-        if (visitorData == null) {
+        if (candidate == null && source === credentials && visitorData == null) {
             visitorData = response["responseContext"]?.jsonObject
                 ?.get("visitorData")?.jsonPrimitive?.content
         }

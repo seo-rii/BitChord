@@ -60,6 +60,12 @@
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="28" />
 
+    <queries>
+        <package android:name="com.google.android.gms" />
+        <package android:name="org.microg.gms" />
+        <package android:name="app.revanced.android.gms" />
+    </queries>
+
     <application
         android:name=".BitChordApplication"
         android:allowBackup="true"

@@ -1081,7 +1081,7 @@ object StreamResolver {
         is PermanentlyUnplayableException -> e.message ?: "This track cannot be played"
         // The whole reason this function exists — see [newPipeStream].
         is AgeRestrictedContentException ->
-            if (Innertube.cookie == null) {
+            if (!Innertube.isSignedIn) {
                 "This track is age-restricted. Sign in to YouTube to play it."
             } else {
                 "YouTube will not serve this age-restricted track to this app."

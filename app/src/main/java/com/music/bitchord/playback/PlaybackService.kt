@@ -383,18 +383,18 @@ class PlaybackService : MediaLibraryService() {
      * [YtMusicRepository.browseSongs] for Liked Music cached for Android Auto's browse tree.
      */
     private var cachedLiked: Pair<Long, List<Song>>? = null
-    private var cachedLikedCookie: String? = null
+    private var cachedLikedSession: String? = null
     private val likedMutex = Mutex()
     private val LIKED_CACHE_TTL_MS = 60_000L
 
     private suspend fun cachedLikedSongs(): List<Song> = likedMutex.withLock {
-        val cookie = com.music.bitchord.data.innertube.Innertube.cookie
-        if (cookie == null) {
+        val sessionKey = com.music.bitchord.data.innertube.Innertube.sessionKey
+        if (sessionKey == null) {
             cachedLiked = null
-            cachedLikedCookie = null
+            cachedLikedSession = null
             return emptyList()
         }
-        if (cachedLikedCookie != null && cachedLikedCookie != cookie) {
+        if (cachedLikedSession != null && cachedLikedSession != sessionKey) {
             cachedLiked = null
         }
         cachedLiked?.let { (at, songs) ->
@@ -421,7 +421,7 @@ class PlaybackService : MediaLibraryService() {
         }
         if (songs.isNotEmpty()) {
             cachedLiked = SystemClock.elapsedRealtime() to songs
-            cachedLikedCookie = cookie
+            cachedLikedSession = sessionKey
             songs.forEach { songCache[it.videoId] = it }
             LikeState.seedLiked(songs.mapTo(HashSet()) { it.videoId })
         }
@@ -449,7 +449,7 @@ class PlaybackService : MediaLibraryService() {
     }
 
     private var cachedPlaylistCards: Pair<Long, List<ShelfItem>>? = null
-    private var cachedPlaylistCookie: String? = null
+    private var cachedPlaylistSession: String? = null
     private val playlistsMutex = Mutex()
     private val PLAYLISTS_CACHE_TTL_MS = 60_000L
 
@@ -471,13 +471,13 @@ class PlaybackService : MediaLibraryService() {
     }
 
     private suspend fun cachedPlaylistCards(): List<ShelfItem> = playlistsMutex.withLock {
-        val cookie = com.music.bitchord.data.innertube.Innertube.cookie
-        if (cookie == null) {
+        val sessionKey = com.music.bitchord.data.innertube.Innertube.sessionKey
+        if (sessionKey == null) {
             cachedPlaylistCards = null
-            cachedPlaylistCookie = null
+            cachedPlaylistSession = null
             return emptyList()
         }
-        if (cachedPlaylistCookie != null && cachedPlaylistCookie != cookie) {
+        if (cachedPlaylistSession != null && cachedPlaylistSession != sessionKey) {
             cachedPlaylistCards = null
         }
         cachedPlaylistCards?.let { (at, cards) ->
@@ -486,7 +486,7 @@ class PlaybackService : MediaLibraryService() {
         val cards = fetchPlaylistCards()
         if (cards.isNotEmpty()) {
             cachedPlaylistCards = SystemClock.elapsedRealtime() to cards
-            cachedPlaylistCookie = cookie
+            cachedPlaylistSession = sessionKey
         }
         cards
     }
@@ -494,12 +494,12 @@ class PlaybackService : MediaLibraryService() {
     private fun snapshotRecents(): List<Song> = cachedRecents?.second.orEmpty()
     private fun snapshotQuickPicks(): List<Song> = cachedQuickPicks?.second.orEmpty()
     private fun snapshotLiked(): List<Song> {
-        val cookie = com.music.bitchord.data.innertube.Innertube.cookie
-        return if (cookie != null && cookie == cachedLikedCookie) cachedLiked?.second.orEmpty() else emptyList()
+        val sessionKey = com.music.bitchord.data.innertube.Innertube.sessionKey
+        return if (sessionKey != null && sessionKey == cachedLikedSession) cachedLiked?.second.orEmpty() else emptyList()
     }
     private fun snapshotPlaylistCards(): List<ShelfItem> {
-        val cookie = com.music.bitchord.data.innertube.Innertube.cookie
-        return if (cookie != null && cookie == cachedPlaylistCookie) cachedPlaylistCards?.second.orEmpty() else emptyList()
+        val sessionKey = com.music.bitchord.data.innertube.Innertube.sessionKey
+        return if (sessionKey != null && sessionKey == cachedPlaylistSession) cachedPlaylistCards?.second.orEmpty() else emptyList()
     }
     private fun snapshotHome(): com.music.bitchord.data.model.HomeFeed? = cachedHome?.second
 
@@ -1283,10 +1283,6 @@ class PlaybackService : MediaLibraryService() {
 
     override fun onCreate() {
         super.onCreate()
-
-        if (com.music.bitchord.data.innertube.Innertube.cookie == null) {
-            com.music.bitchord.data.innertube.Innertube.cookie = com.music.bitchord.auth.AuthStore(this).cookie
-        }
 
         // First, because everything below assumes it is standing up fresh and
         // one of the two ways this service starts does not give it that.
@@ -8824,7 +8820,7 @@ class PlaybackService : MediaLibraryService() {
                     )
                 }
                 MEDIA_LIKED_ID -> {
-                    if (com.music.bitchord.data.innertube.Innertube.cookie == null) {
+                    if (!com.music.bitchord.data.innertube.Innertube.isSignedIn) {
                         listOf(createLoginPromptItem())
                     } else {
                         val snapshot = snapshotLiked()
@@ -8864,7 +8860,7 @@ class PlaybackService : MediaLibraryService() {
                     )
                 }
                 MEDIA_PLAYLISTS_ID -> {
-                    if (com.music.bitchord.data.innertube.Innertube.cookie == null) {
+                    if (!com.music.bitchord.data.innertube.Innertube.isSignedIn) {
                         listOf(createLoginPromptItem())
                     } else {
                         val snapshot = snapshotPlaylistCards()

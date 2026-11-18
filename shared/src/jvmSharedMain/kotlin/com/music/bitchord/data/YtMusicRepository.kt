@@ -2,6 +2,7 @@ package com.music.bitchord.data
 
 import com.music.bitchord.data.DebugLog as Log
 import com.music.bitchord.data.innertube.Innertube
+import com.music.bitchord.data.innertube.YouTubeTokenProvider
 import com.music.bitchord.data.innertube.InnertubeParser
 import com.music.bitchord.data.model.Account
 import com.music.bitchord.data.model.AccountChannel
@@ -125,7 +126,7 @@ object YtMusicRepository {
      * Signed-in only; there is no history to read as a guest.
      */
     private suspend fun recentlyPlayed(): HomeShelf? {
-        val ytSongs = if (Innertube.cookie != null) {
+        val ytSongs = if (Innertube.isSignedIn) {
             runCatching { fetchHistory() }.getOrDefault(emptyList())
         } else {
             emptyList()
@@ -159,14 +160,14 @@ object YtMusicRepository {
      * through either.
      */
     private suspend fun fetchHistory(): List<Song> = historyLock.withLock {
-        val cookie = Innertube.cookie
+        val key = Innertube.sessionKey
         // Recents and Top Picks both want the history the moment Home opens;
         // whichever asks second waits for the first and shares its answer
         // instead of sending the same request again.
-        historyMemo?.takeIf { it.cookie == cookie && System.currentTimeMillis() - it.at < HISTORY_SHARE_MS }
+        historyMemo?.takeIf { it.sessionKey == key && System.currentTimeMillis() - it.at < HISTORY_SHARE_MS }
             ?.let { return@withLock it.songs }
         InnertubeParser.collectSongsDeep(Innertube.browse(HISTORY)).distinctBy { it.videoId }
-            .also { historyMemo = HistoryMemo(cookie, System.currentTimeMillis(), it) }
+            .also { historyMemo = HistoryMemo(key, System.currentTimeMillis(), it) }
     }
 
     private val historyLock = Mutex()
@@ -185,7 +186,7 @@ object YtMusicRepository {
 
     /** Account listening history for the Recents feed. */
     suspend fun recents(): Result<List<Song>> = call("recents") {
-        if (Innertube.cookie != null) {
+        if (Innertube.isSignedIn) {
             val history = runCatching { fetchHistory() }.getOrDefault(emptyList())
             if (history.isNotEmpty()) return@call history
         }
@@ -510,7 +511,7 @@ object YtMusicRepository {
      * Signed out, YouTube pairs nothing, so the request is not made at all.
      */
     private suspend fun officialVersion(song: Song, wantAudio: Boolean): Song? {
-        if (Innertube.cookie == null) return null
+        if (!Innertube.isSignedIn) return null
         val pair = try {
             InnertubeParser.parseVersionPair(Innertube.next(song.videoId), song.videoId, wantAudio)
         } catch (e: CancellationException) {
@@ -540,6 +541,13 @@ object YtMusicRepository {
             ?: error("No account details")
     }
 
+    suspend fun oauthAccount(provider: YouTubeTokenProvider): Result<Account> = withContext(Dispatchers.IO) {
+        runCatching {
+            InnertubeParser.parseAccount(Innertube.oauthAccountMenu(provider))
+                ?: error("No account details")
+        }.onFailure { if (it is CancellationException) throw it }
+    }
+
     /**
      * The channels this login can act as — its own, plus any brand channels.
      *
@@ -556,7 +564,7 @@ object YtMusicRepository {
         }.onFailure { Log.w(TAG, "accounts_list unavailable: ${it.message}") }
             .getOrNull()
             .orEmpty()
-        if (viaInnertube.isNotEmpty()) return@call viaInnertube
+        if (viaInnertube.isNotEmpty() || Innertube.cookie == null) return@call viaInnertube
         InnertubeParser.parseAccountChannels(Innertube.accountSwitcher())
     }
 
@@ -1200,7 +1208,7 @@ object YtMusicRepository {
      * that shelf's More opens, and it answers in one request.
      */
     suspend fun mixedForYou(): Result<List<ShelfItem>> = call("mixedForYou") {
-        if (Innertube.cookie == null) return@call emptyList()
+        if (!Innertube.isSignedIn) return@call emptyList()
         InnertubeParser.parseTwoRowItemsDeep(Innertube.browse("FEmusic_mixed_for_you"))
     }
 
@@ -1211,9 +1219,9 @@ object YtMusicRepository {
      * [recentlyPlayed] ever sees a stale copy.
      */
     suspend fun recentHistory(): Result<List<Song>> = call("history:recent") {
-        if (Innertube.cookie == null) return@call emptyList()
+        if (!Innertube.isSignedIn) return@call emptyList()
         val memo = historyMemo
-        if (memo != null && memo.cookie == Innertube.cookie &&
+        if (memo != null && memo.sessionKey == Innertube.sessionKey &&
             System.currentTimeMillis() - memo.at < HISTORY_MEMO_MS
         ) {
             memo.songs
@@ -1222,7 +1230,7 @@ object YtMusicRepository {
         }
     }
 
-    private class HistoryMemo(val cookie: String?, val at: Long, val songs: List<Song>)
+    private class HistoryMemo(val sessionKey: String?, val at: Long, val songs: List<Song>)
 
     @Volatile
     private var historyMemo: HistoryMemo? = null

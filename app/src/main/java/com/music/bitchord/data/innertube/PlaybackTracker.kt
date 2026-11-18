@@ -112,7 +112,7 @@ object PlaybackTracker {
      */
     fun onPlaying(videoId: String) {
         if (!VIDEO_ID.matches(videoId)) return
-        if (Innertube.cookie == null) return
+        if (!Innertube.isSignedIn) return
         // A downloaded track plays perfectly well with the radio off — the
         // whole point of downloading it — so this is the one place that has
         // to ask before trying rather than let a request find out the hard

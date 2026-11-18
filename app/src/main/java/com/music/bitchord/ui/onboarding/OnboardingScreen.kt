@@ -373,7 +373,7 @@ private fun ColumnScope.ConnectPage(
     // WireGuard/proxy setup now happens FIRST, before NamePage.
     // Do not duplicate a proxy action beside Google sign-in here.
     PillButton(
-        label = stringResource(R.string.onboarding_sign_in_google),
+        label = stringResource(R.string.microg_sign_in),
         onClick = onSignIn,
         primary = true,
         leading = {

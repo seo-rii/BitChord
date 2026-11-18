@@ -53,7 +53,7 @@
 - **Apple-like lyrics animation** — credit to [binimum](https://github.com/binimum/am-lyrics).
 
 #### Connectivity & Accounts
-- **Sign in with your Google account** for personalized content.
+- **Sign in with microG** on Android phones for your YouTube Music library and playlists.
 - **Spotify integration** — connect your account to play your playlists and Liked Songs.
 - **Discord Rich Presence** — in-app login, live track/artist/album and progress.
 - **Scrobbling** to Last.fm and ListenBrainz.
@@ -88,6 +88,14 @@
 <div align="center">
 
 <h1><a id="download"></a>Download</h1>
+
+The phone APKs for this fork are in the **BitChord-microG-APK** artifact of a successful [Android microG APK build](https://github.com/seo-rii/BitChord/actions/workflows/microg-apk.yml?query=branch%3Afeat%2Fandroid-microg). Choose <code>arm64-v8a</code> for a modern Android phone or <code>x86_64</code> for a compatible emulator.
+
+On the phone, add your Google account to microG Services or ReVanced GmsCore, open BitChord, and tap **Sign in**. Select the account in the Android chooser and approve YouTube access. BitChord verifies the account with YouTube Music before displaying its library. You can remove it from BitChord's account selector and keep the device account.
+
+The development package is <code>com.dev.bitchord</code>. The artifact includes its signing certificate fingerprint. For reproducible development signing across builds, configure the repository's <code>DEBUG_KEYSTORE_BASE64</code> secret with a standard Android debug keystore. If Google requires Android OAuth client registration, use the package and SHA-1 of the installed APK. microG account and consent traffic uses microG's own network connection. [App-local proxy setup](docs/APP_LOCAL_PROXY.md).
+
+The links below open upstream releases.
 
 <a href="https://github.com/kushagrasinghx/BitChord/releases" target="_blank" rel="noopener noreferrer"><img src="https://cdn.jsdelivr.net/gh/JMcrafter26/badges@main/src/assets/supported/android/cozy.svg" alt="Download for Android" height="55"/></a>
 

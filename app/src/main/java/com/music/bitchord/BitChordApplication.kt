@@ -17,6 +17,7 @@ import coil3.svg.SvgDecoder
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import okhttp3.OkHttpClient
 import com.music.bitchord.auth.AuthStore
+import com.music.bitchord.auth.applyYouTubeSession
 import com.music.bitchord.data.DebugLog
 import com.music.bitchord.data.lyrics.LyricsTranslation
 import androidx.appcompat.app.AppCompatDelegate
@@ -135,8 +136,8 @@ class BitChordApplication : Application(), SingletonImageLoader.Factory, Configu
         if (restoredSession != null && authStore.activeAccountId == null) {
             authStore.select(restoredSession.accountId, restoredSession.activeProfileId)
         }
-        authStore.cookie = restoredSession?.cookie
-        Innertube.cookie = restoredSession?.cookie
+        authStore.cookie = restoredSession?.cookie?.ifBlank { null }
+        applyYouTubeSession(this, restoredSession)
         // Which account that cookie actually acts as. Read here rather than on
         // demand so the answer is usually in hand before the first request needs
         // it: a play registered under the wrong account is indistinguishable, to

@@ -4,7 +4,11 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.music.bitchord.R
+import android.accounts.Account as DeviceAccount
 import com.music.bitchord.auth.AuthStore
+import com.music.bitchord.auth.applyYouTubeSession
+import com.music.bitchord.auth.microGAccountId
+import com.music.bitchord.data.innertube.YouTubeTokenProvider
 import com.music.bitchord.auth.SignedIn
 import com.music.bitchord.auth.GoogleAccountSession
 import com.music.bitchord.auth.YouTubeProfile
@@ -3288,15 +3292,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      *   itself reports which channel is active.
      */
     fun loadChannels(force: Boolean = false) {
-        if (!_signedIn.value) return
+        if (!_signedIn.value || authStore.activeSession?.isMicroG == true) return
+        val accountId = _activeAccountId.value
         if (_channelsLoading.value) return
         if (!force && _channels.value.isNotEmpty()) return
         viewModelScope.launch {
             _channelsLoading.value = true
             YtMusicRepository.accountChannels()
                 .onSuccess {
-                    _channels.value = it
-                    persistDetectedProfiles(it)
+                    if (_activeAccountId.value == accountId) {
+                        _channels.value = it
+                        persistDetectedProfiles(it)
+                    }
                 }
             _channelsLoading.value = false
         }
@@ -3378,7 +3385,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             val accountId = when (mode) {
                 WebSessionMode.SWITCH_CHANNEL -> oldAccountId
                 WebSessionMode.SIGN_IN -> authStore.sessions.firstOrNull {
-                    account.email.isNotBlank() && it.email.equals(account.email, ignoreCase = true)
+                    !it.isMicroG && account.email.isNotBlank() && it.email.equals(account.email, ignoreCase = true)
                 }?.accountId ?: sessionId(session.cookie, null)
             }
             if (accountId == null) {
@@ -3412,34 +3419,62 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 activeProfileId = profile.profileId,
             )
 
-            val wasSignedIn = _signedIn.value
-            if (wasSignedIn) cacheCurrentListener()
-            authStore.upsertSession(stored)
-            authStore.cookie = session.cookie // legacy compatibility only
-            _googleAccounts.value = authStore.sessions
-            _activeAccountId.value = accountId
-            _activeProfileId.value = profile.profileId
-            _selectedChannelKey.value = profile.profileId
-            _selectedChannelName.value = account.name
-            _account.value = account
-            _channels.value = emptyList()
-            _signedIn.value = true
-
-            // Every resolver verdict and personalised page belongs to the
-            // identity that was active before validation succeeded.
-            StreamResolver.onSessionChanged()
-            if (wasSignedIn) clearListenerState()
-            reloadForAccount()
-            loadChannels(force = true)
+            acceptAccount(stored, profile, account)
             onComplete(true)
         }
+    }
+
+    /** Validate the grant independently while the current listener stays active. */
+    suspend fun onMicroGAccount(deviceAccount: DeviceAccount, provider: YouTubeTokenProvider): Boolean {
+        val account = withTimeoutOrNull(20_000L) {
+            YtMusicRepository.oauthAccount(provider).getOrNull()
+        } ?: return false
+        currentCoroutineContext().ensureActive()
+        val profile = YouTubeProfile(
+            profileId = profileId(null, null, account.name),
+            name = account.name,
+            handle = account.email,
+            avatar = account.thumbnailUrl,
+        )
+        val session = GoogleAccountSession(
+            accountId = microGAccountId(deviceAccount.name, deviceAccount.type),
+            cookie = "",
+            name = account.name,
+            email = account.email,
+            profiles = listOf(profile),
+            activeProfileId = profile.profileId,
+            microGAccountName = deviceAccount.name,
+            microGAccountType = deviceAccount.type,
+        )
+        Innertube.useOAuth(session.accountId, provider)
+        acceptAccount(session, profile, account)
+        return true
+    }
+
+    private fun acceptAccount(session: GoogleAccountSession, profile: YouTubeProfile, account: Account) {
+        val wasSignedIn = _signedIn.value
+        if (wasSignedIn) cacheCurrentListener()
+        authStore.upsertSession(session)
+        authStore.cookie = session.cookie.ifBlank { null }
+        _googleAccounts.value = authStore.sessions
+        _activeAccountId.value = session.accountId
+        _activeProfileId.value = profile.profileId
+        _selectedChannelKey.value = profile.profileId
+        _selectedChannelName.value = account.name
+        _channels.value = emptyList()
+        _signedIn.value = true
+        StreamResolver.onSessionChanged()
+        if (wasSignedIn) clearListenerState()
+        _account.value = account
+        reloadForAccount()
+        loadChannels(force = true)
     }
 
     /** Put request signing back exactly as it was after a rejected candidate. */
     private fun restoreActiveSession(accountId: String?, selectedProfileId: String?) {
         val account = authStore.sessions.firstOrNull { it.accountId == accountId }
         val profile = account?.profiles?.firstOrNull { it.profileId == selectedProfileId }
-        Innertube.cookie = account?.cookie
+        applyYouTubeSession(getApplication(), account)
         Innertube.selectChannel(profile?.pageId, profile?.dataSyncId, profile?.authUser)
     }
 
@@ -3464,8 +3499,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         _googleAccounts.value = authStore.sessions
         _activeAccountId.value = accountId
         _activeProfileId.value = profile.profileId
-        authStore.cookie = updated.cookie
-        Innertube.cookie = updated.cookie
+        authStore.cookie = updated.cookie.ifBlank { null }
+        applyYouTubeSession(getApplication(), updated)
+        _channels.value = emptyList()
         Innertube.selectChannel(profile.pageId, profile.dataSyncId, profile.authUser)
         _selectedChannelKey.value = profile.profileId
         _selectedChannelName.value = profile.name

@@ -12,7 +12,11 @@ data class GoogleAccountSession(
     val email: String = "",
     val profiles: List<YouTubeProfile> = emptyList(),
     val activeProfileId: String? = null,
-)
+    val microGAccountName: String? = null,
+    val microGAccountType: String? = null,
+) {
+    val isMicroG: Boolean get() = !microGAccountName.isNullOrBlank() && !microGAccountType.isNullOrBlank()
+}
 
 /** One Personal or Brand identity available under a Google login. */
 data class YouTubeProfile(
@@ -41,6 +45,9 @@ fun adjacentProfile(
 internal fun sessionId(cookie: String, dataSyncId: String?): String =
     dataSyncId?.takeIf { it.isNotBlank() } ?: sha256(cookie).take(24)
 
+internal fun microGAccountId(name: String, type: String): String =
+    "microg:" + sha256("$type\u0000$name").take(24)
+
 internal fun profileId(pageId: String?, dataSyncId: String?, name: String): String =
     pageId ?: dataSyncId ?: "profile:${sha256(name).take(16)}"
 
@@ -51,7 +58,13 @@ private fun sha256(value: String): String = MessageDigest.getInstance("SHA-256")
 internal fun List<GoogleAccountSession>.toJson(): String = JSONArray().apply {
     forEach { session ->
         put(JSONObject().apply {
-            put("id", session.accountId); put("cookie", session.cookie)
+            put("id", session.accountId)
+            if (session.isMicroG) {
+                put("microGAccountName", session.microGAccountName)
+                put("microGAccountType", session.microGAccountType)
+            } else {
+                put("cookie", session.cookie)
+            }
             put("name", session.name); put("email", session.email)
             put("activeProfileId", session.activeProfileId)
             put("profiles", JSONArray().apply {
@@ -72,10 +85,18 @@ internal fun sessionsFromJson(raw: String?): List<GoogleAccountSession> = runCat
         for (index in 0 until root.length()) {
             val item = root.getJSONObject(index)
             val cookie = item.optString("cookie")
-            if (cookie.isNotBlank()) {
+            val microGName = item.optString("microGAccountName").takeIf { it.isNotBlank() }
+            val microGType = item.optString("microGAccountType").takeIf { it.isNotBlank() }
+            val microG = microGName != null && microGType != null
+            if (cookie.isBlank() && !microG) continue
             val profiles = item.optJSONArray("profiles") ?: JSONArray()
             add(GoogleAccountSession(
-                accountId = item.optString("id", sessionId(cookie, null)), cookie = cookie,
+                accountId = item.optString("id").ifBlank {
+                    if (microGName != null && microGType != null) microGAccountId(microGName, microGType)
+                    else sessionId(cookie, null)
+                },
+                cookie = if (microG) "" else cookie,
+                microGAccountName = microGName, microGAccountType = microGType,
                 name = item.optString("name"), email = item.optString("email"),
                 activeProfileId = item.optString("activeProfileId").ifBlank { null },
                 profiles = buildList {
@@ -94,7 +115,6 @@ internal fun sessionsFromJson(raw: String?): List<GoogleAccountSession> = runCat
                     }
                 },
             ))
-            }
         }
     }
 }.getOrDefault(emptyList())

@@ -126,8 +126,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.music.bitchord.auth.DiscordLoginScreen
 import com.music.bitchord.auth.SpotifyLoginScreen
-import com.music.bitchord.auth.WebSessionMode
-import com.music.bitchord.auth.YtMusicLoginScreen
+import com.music.bitchord.auth.MicroGLoginScreen
 import com.music.bitchord.data.AppUpdateChecker
 import com.music.bitchord.data.LocalMediaRepository
 import com.music.bitchord.data.listentogether.JamInviteLink
@@ -632,7 +631,7 @@ private fun BitChordApp(
      * What the in-app browser is open for, or null while it is closed —
      * signing in, or picking a channel in YouTube Music's own Accounts list.
      */
-    var webSession by remember { mutableStateOf<WebSessionMode?>(null) }
+    var showMicroGLogin by rememberSaveable { mutableStateOf(false) }
     // Replay: the page (a route on the back stack — see [AppNavigator]), the
     // stories over it, and the share sheet over those. Closing one has to
     // reveal what it was opened from.
@@ -930,7 +929,7 @@ private fun BitChordApp(
         dismissPlayer()
         replayStory = null
         showReplayShare = false
-        webSession = null
+        showMicroGLogin = false
         navigator.reset(AppRoute.Settings, AppRoute.ListenTogether)
         JamInviteLink.handled()
     }
@@ -3089,7 +3088,7 @@ private fun BitChordApp(
                                 channelName = selectedChannelName,
                                 onSignIn = {
                                     navigator.clear()
-                                    webSession = WebSessionMode.SIGN_IN
+                                    showMicroGLogin = true
                                 },
                                 onSwitchChannel = {
                                     viewModel.loadChannels()
@@ -3130,7 +3129,7 @@ private fun BitChordApp(
                                 },
                                 onSignIn = {
                                     navigator.clear()
-                                    webSession = WebSessionMode.SIGN_IN
+                                    showMicroGLogin = true
                                 },
                                 contentPadding = listPadding,
                                 onEditServer = { editingPartyServer = true },
@@ -3164,7 +3163,7 @@ private fun BitChordApp(
                                 account = account,
                                 onSignIn = {
                                     navigator.clear()
-                                    webSession = WebSessionMode.SIGN_IN
+                                    showMicroGLogin = true
                                 },
                                 onSignOut = { viewModel.signOut() },
                                 onAccountScrobbling = { navigator.push(AppRoute.AccountScrobbling) },
@@ -3429,7 +3428,7 @@ private fun BitChordApp(
                                 festiveLogo = diwaliFestive,
                                 onFestiveLogoClick = { showDiwali = true },
                                 signedIn = signedIn,
-                                onSignIn = { webSession = WebSessionMode.SIGN_IN },
+                                onSignIn = { showMicroGLogin = true },
                                 onConfigureProxy = {
                                     context.startActivity(
                                         Intent(context, com.music.bitchord.proxy.AppProxySettingsActivity::class.java),
@@ -3738,7 +3737,7 @@ private fun BitChordApp(
                                         },
                                     )
                                 },
-                                onSignIn = { webSession = WebSessionMode.SIGN_IN },
+                                onSignIn = { showMicroGLogin = true },
                                 onRetry = viewModel::loadLibrary,
                                 refreshing = MainViewModel.Feed.LIBRARY in refreshing,
                                 onRefresh = { viewModel.refresh(MainViewModel.Feed.LIBRARY) },
@@ -5378,7 +5377,7 @@ private fun BitChordApp(
             }
         }
 
-        // ---- Welcome (once; under the sign-in WebView it can open) ----
+        // ---- Welcome ----
         // There from the first frame, so no way in; on the way out it drops
         // like a dismissed sheet onto the app it was standing in front of.
         AnimatedVisibility(
@@ -5415,7 +5414,7 @@ private fun BitChordApp(
                     }
                 },
                 onNameChosen = ListenTogether::setNickname,
-                onSignIn = { webSession = WebSessionMode.SIGN_IN },
+                onSignIn = { showMicroGLogin = true },
                 onPickWireGuardConf = firstRunConfImport.openConf,
                 confImportError = firstRunConfImport.error,
                 confImporting = firstRunConfImport.importing,
@@ -5427,96 +5426,20 @@ private fun BitChordApp(
         // This dialog belongs to the main Activity, not the onboarding page.
         WireGuardImportRestartDialog(firstRunConfImport)
 
-        // ---- Google sign-in (full screen WebView) ----
-        webSession?.let { mode ->
-            BackHandler { webSession = null }
-            // Raised by "Use this channel", read by the browser as "take the
-            // session from the page as it now stands". A counter rather than a
-            // flag so a second tap, after a failed first one, is still a new
-            // request rather than a value that was already true.
-            var captureRequest by remember(mode) { mutableIntStateOf(0) }
-            var captureFailed by remember(mode) { mutableStateOf(false) }
-            var pageReady by remember(mode) { mutableStateOf(false) }
-            var confirmingProfile by remember(mode) { mutableStateOf(false) }
-            Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                Column(Modifier.fillMaxSize()) {
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .statusBarsPadding()
-                            .padding(horizontal = 8.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        IconButton(onClick = { webSession = null }) {
-                            Icon(
-                                Icons.Rounded.Close,
-                                contentDescription = stringResource(R.string.close),
-                                tint = MaterialTheme.colorScheme.onBackground,
-                            )
-                        }
-                        Column(Modifier.weight(1f)) {
-                            Text(
-                                text = when (mode) {
-                                    WebSessionMode.SIGN_IN -> stringResource(R.string.sign_in_youtube_music)
-                                    WebSessionMode.SWITCH_CHANNEL -> stringResource(R.string.choose_profile)
-                                },
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onBackground,
-                            )
-                            if (pageReady) {
-                                Text(
-                                    text = if (captureFailed) {
-                                         stringResource(R.string.profile_unavailable)
-                                     } else {
-                                         stringResource(R.string.switch_profile_hint)
-                                    },
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 2,
-                                )
-                            }
-                        }
-                        if (pageReady) {
-                            TextButton(onClick = {
-                                captureFailed = false
-                                confirmingProfile = true
-                                captureRequest++
-                            }, enabled = !confirmingProfile) {
-                                Text(
-                                    if (confirmingProfile) stringResource(R.string.checking)
-                                    else stringResource(R.string.use_this_profile),
-                                )
-                            }
+        if (showMicroGLogin) {
+            BackHandler { showMicroGLogin = false }
+            MicroGLoginScreen(
+                onDismiss = { showMicroGLogin = false },
+                onAuthorized = { account, provider ->
+                    viewModel.onMicroGAccount(account, provider).also { accepted ->
+                        if (accepted) {
+                            showMicroGLogin = false
+                            navigator.clear()
+                            selectedTab = TAB_LIBRARY
                         }
                     }
-                    YtMusicLoginScreen(
-                        mode = mode,
-                        initialCookie = if (mode == WebSessionMode.SWITCH_CHANNEL) {
-                            googleAccounts.firstOrNull { it.accountId == activeAccountId }?.cookie
-                        } else null,
-                        captureRequest = captureRequest,
-                        onPageReady = { pageReady = it },
-                        onCaptureUnavailable = {
-                            confirmingProfile = false
-                            captureFailed = true
-                        },
-                        onCaptured = { session ->
-                            viewModel.onWebSession(session, mode) { accepted ->
-                                confirmingProfile = false
-                                if (accepted) {
-                                    webSession = null
-                                    if (mode == WebSessionMode.SIGN_IN) {
-                                        navigator.clear()
-                                        selectedTab = TAB_LIBRARY
-                                    }
-                                } else {
-                                    captureFailed = true
-                                }
-                            }
-                        },
-                    )
-                }
-            }
+                },
+            )
         }
 
         // ---- Diwali greeting ----
@@ -5637,7 +5560,7 @@ private fun BitChordApp(
                 onSelect = { selected, profile -> viewModel.selectProfile(selected.accountId, profile.profileId) },
                 onAddAccount = {
                     showAccountSelector = false
-                    webSession = WebSessionMode.SIGN_IN
+                    showMicroGLogin = true
                 },
                 onRemoveAccount = { selected ->
                     viewModel.removeAccount(selected.accountId)

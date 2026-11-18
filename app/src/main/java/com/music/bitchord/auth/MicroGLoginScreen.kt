@@ -4,27 +4,28 @@ import android.accounts.Account
 import android.accounts.AccountManager
 import android.accounts.OperationCanceledException
 import android.app.Activity
-import android.content.Context
-import android.content.ContextWrapper
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.withResumed
 import com.music.bitchord.R
 import com.music.bitchord.data.innertube.YouTubeTokenProvider
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.launch
+
+private enum class SignInStep { ChooseAccount, RequestGrant, AwaitConsent, ConfirmGrant }
 
 @Composable
 fun MicroGLoginScreen(
@@ -32,73 +33,115 @@ fun MicroGLoginScreen(
     onAuthorized: suspend (Account, YouTubeTokenProvider) -> Boolean,
 ) {
     val context = LocalContext.current
-    val activity = remember(context) {
-        generateSequence(context) { (it as? ContextWrapper)?.baseContext }.filterIsInstance<Activity>().firstOrNull()
-    }
-    val scope = rememberCoroutineScope()
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
     val authorize by rememberUpdatedState(onAuthorized)
-    val dismiss by rememberUpdatedState(onDismiss)
-    var choosing by rememberSaveable { mutableStateOf(false) }
-    var authorizing by remember { mutableStateOf(false) }
+    var step by rememberSaveable { mutableStateOf(SignInStep.ChooseAccount) }
+    var selected by rememberSaveable { mutableStateOf<Account?>(null) }
+    val provider = remember(context, selected) { selected?.let { MicroGTokenProvider(context, it) } }
     var error by rememberSaveable { mutableStateOf<Int?>(null) }
+    var verifyingYouTube by remember { mutableStateOf(false) }
+    // The token stays inside the provider and is never saved in Activity state.
+    var receivedGrant by remember(provider) { mutableStateOf(false) }
+
+    val consent = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (step == SignInStep.AwaitConsent) {
+            // Older microG releases may return RESULT_CANCELED even after granting access.
+            receivedGrant = provider?.acceptConsentResult(result.data) == true
+            step = SignInStep.ConfirmGrant
+        }
+    }
     val chooser = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        choosing = false
         if (result.resultCode != Activity.RESULT_OK) {
-            dismiss()
-            return@rememberLauncherForActivityResult
-        }
-        val name = result.data?.getStringExtra(AccountManager.KEY_ACCOUNT_NAME)
-        val type = result.data?.getStringExtra(AccountManager.KEY_ACCOUNT_TYPE)
-        if (activity == null || name.isNullOrBlank() || type.isNullOrBlank()) {
-            error = R.string.microg_authorization_failed
-            return@rememberLauncherForActivityResult
-        }
-        authorizing = true
-        scope.launch {
-            try {
-                val account = Account(name, type)
-                val provider = MicroGTokenProvider(context, account)
-                provider.authorize(activity)
-                if (!authorize(account, provider)) error = R.string.microg_youtube_failed
-            } catch (_: OperationCanceledException) {
-                dismiss()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (_: Exception) {
+            onDismiss()
+        } else {
+            val name = result.data?.getStringExtra(AccountManager.KEY_ACCOUNT_NAME)
+            val type = result.data?.getStringExtra(AccountManager.KEY_ACCOUNT_TYPE)
+            if (name.isNullOrBlank() || type.isNullOrBlank()) {
                 error = R.string.microg_authorization_failed
-            } finally {
-                authorizing = false
+            } else {
+                selected = Account(name, type)
+                receivedGrant = false
+                error = null
+                step = SignInStep.RequestGrant
             }
         }
     }
 
+    LaunchedEffect(step, provider) {
+        if (step != SignInStep.RequestGrant && step != SignInStep.ConfirmGrant) return@LaunchedEffect
+        val account = selected ?: return@LaunchedEffect
+        val tokens = provider ?: return@LaunchedEffect
+        try {
+            if (step == SignInStep.RequestGrant) {
+                val intent = tokens.prepareAuthorization()
+                if (intent != null) {
+                    // The account chooser can deliver its result before our Activity is resumed.
+                    lifecycle.withResumed {
+                        step = SignInStep.AwaitConsent
+                        consent.launch(intent)
+                    }
+                    return@LaunchedEffect
+                }
+                receivedGrant = true
+            }
+            val accepted = verifyMicroGConsent(
+                acceptResult = { receivedGrant },
+                requestAfterConsent = tokens::finishAuthorization,
+                verifyAccount = {
+                    verifyingYouTube = true
+                    authorize(account, tokens)
+                },
+            )
+            if (!accepted) error = R.string.microg_youtube_failed
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: MicroGRequestTimeoutException) {
+            error = R.string.microg_timeout
+        } catch (_: MicroGConsentRequiredException) {
+            error = R.string.microg_consent_required
+        } catch (_: OperationCanceledException) {
+            error = R.string.microg_consent_required
+        } catch (_: Exception) {
+            error = R.string.microg_authorization_failed
+        } finally {
+            verifyingYouTube = false
+        }
+        step = SignInStep.ChooseAccount
+    }
+
+    val message = error ?: when {
+        verifyingYouTube -> R.string.microg_checking_youtube
+        step == SignInStep.RequestGrant || step == SignInStep.ConfirmGrant -> R.string.microg_requesting_grant
+        step == SignInStep.AwaitConsent -> R.string.microg_waiting_for_consent
+        else -> R.string.microg_account_prompt
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.microg_sign_in)) },
-        text = {
-            Text(stringResource(error ?: if (authorizing) R.string.microg_authorizing else R.string.microg_account_prompt))
-        },
+        text = { Text(stringResource(message)) },
         confirmButton = {
-            TextButton(
-                enabled = !authorizing && !choosing,
-                onClick = {
+            if (step == SignInStep.AwaitConsent) {
+                // Also recover if Android returned to BitChord without delivering an Activity result.
+                TextButton(onClick = { step = SignInStep.ConfirmGrant }) {
+                    Text(stringResource(R.string.microg_check_grant))
+                }
+            } else if (step == SignInStep.ChooseAccount) {
+                TextButton(onClick = {
                     error = null
                     try {
                         val types = microGAccountTypes(context)
                         if (types.isEmpty()) {
                             error = R.string.microg_unavailable
                         } else {
-                            choosing = true
                             chooser.launch(AccountManager.newChooseAccountIntent(
                                 null, null, types.toTypedArray(), null, null, null, null,
                             ))
                         }
                     } catch (_: Exception) {
-                        choosing = false
                         error = R.string.microg_authorization_failed
                     }
-                },
-            ) { Text(stringResource(R.string.microg_choose_account)) }
+                }) { Text(stringResource(R.string.microg_choose_account)) }
+            }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }

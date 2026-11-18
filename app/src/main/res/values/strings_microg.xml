@@ -3,7 +3,12 @@
     <string name="microg_sign_in">Sign in with microG</string>
     <string name="microg_choose_account">Choose account</string>
     <string name="microg_account_prompt">Choose a microG account and allow BitChord to manage your YouTube music library. microG connects to Google using its own network settings.</string>
-    <string name="microg_authorizing">Waiting for microG and YouTube Music…</string>
+    <string name="microg_requesting_grant">Requesting YouTube access from microG…</string>
+    <string name="microg_checking_youtube">Checking the account with YouTube Music…</string>
+    <string name="microg_waiting_for_consent">Approve access in microG. If BitChord is already back on screen, you can check the permission now.</string>
+    <string name="microg_check_grant">Check permission</string>
+    <string name="microg_timeout">microG did not respond within 30 seconds. Check that microG can reach Google, then try again. If you use BitChord’s WireGuard proxy, microG needs its own connection.</string>
+    <string name="microg_consent_required">YouTube access still needs approval in microG. Choose the account again to retry.</string>
     <string name="microg_unavailable">Install or enable microG Services or ReVanced GmsCore, then choose an account again.</string>
     <string name="microg_authorization_failed">microG could not authorize this account. Check its network connection and the Android OAuth registration for this APK, then try again.</string>
     <string name="microg_youtube_failed">YouTube Music could not verify this account. Check your connection and try again.</string>

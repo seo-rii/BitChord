@@ -78,6 +78,7 @@ jobs:
           bash ./gradlew :shared:jvmTest --tests '*MicroGRequestTest' --tests '*AppProxyRouteTest' \
             :app:testDevDebugUnitTest \
             --tests 'com.music.bitchord.AccountSessionsTest' \
+            --tests 'com.music.bitchord.auth.MicroGConsentFlowTest' \
             --tests 'com.music.bitchord.AuthCookieTest'
       - name: Assemble optimized phone APKs
         run: bash ./gradlew :app:assembleDevOptimized

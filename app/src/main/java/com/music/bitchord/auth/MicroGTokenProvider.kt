@@ -3,10 +3,8 @@ package com.music.bitchord.auth
 import android.accounts.Account
 import android.accounts.AccountManager
 import android.accounts.AccountManagerCallback
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.core.os.BundleCompat
 import com.music.bitchord.data.innertube.YouTubeTokenProvider
@@ -17,24 +15,6 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 
 private const val TOKEN_TYPE = "oauth2:https://www.googleapis.com/auth/youtube"
-
-/** Restrict the system chooser and later token requests to installed microG authenticators. */
-internal fun microGAccountTypes(context: Context): List<String> =
-    AccountManager.get(context).authenticatorTypes.filter { authenticator ->
-        when (authenticator.packageName) {
-            "app.revanced.android.gms" -> authenticator.type == "app.revanced"
-            "org.microg.gms" -> authenticator.type == "com.google"
-            "com.google.android.gms" -> authenticator.type == "com.google" && try {
-                // System microG and stock Play Services use the same package and account type.
-                val service = ComponentName(authenticator.packageName, "org.microg.gms.auth.loginservice.GoogleLoginService")
-                context.packageManager.getServiceInfo(service, 0)
-                true
-            } catch (_: PackageManager.NameNotFoundException) {
-                false
-            }
-            else -> false
-        }
-    }.map { it.type }.distinct()
 
 class MicroGTokenProvider(context: Context, private val account: Account) : YouTubeTokenProvider {
     private val appContext = context.applicationContext

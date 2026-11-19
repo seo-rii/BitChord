@@ -64,6 +64,7 @@
         <package android:name="com.google.android.gms" />
         <package android:name="org.microg.gms" />
         <package android:name="app.revanced.android.gms" />
+        <package android:name="com.mgoogle.android.gms" />
     </queries>
 
     <application

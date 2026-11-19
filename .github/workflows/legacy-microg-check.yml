@@ -29,6 +29,13 @@ jobs:
             'https://github.com/TeamVanced/VancedMicroG/releases/download/v0.2.24.220220-220220001/microg.apk'
           cd "$RUNNER_TEMP"
           echo 'e5ce4f9759d3e70ac479bf2d0707efe5a42fca8513cf387de583b8659dbfbbbf  vanced-microg.apk' | sha256sum --check
+      - name: Download and verify microG Services 0.3.1.241017
+        run: |
+          curl --fail --location --retry 3 --header 'Accept: application/octet-stream' \
+            --output "$RUNNER_TEMP/microg-241017.apk" \
+            'https://api.github.com/repos/fromhgbwithluv/GmsCore/releases/assets/158995652'
+          cd "$RUNNER_TEMP"
+          echo '3464c740c6d53c6e8d4fac6887233fc94d7c62bba5d04827c8ba7e053c223ed1  microg-241017.apk' | sha256sum --check
       - name: Reserve space for the Android build and emulator
         run: |
           if [ "$(df --output=avail -k "$GITHUB_WORKSPACE" | tail -1)" -lt 20971520 ]; then
@@ -41,28 +48,41 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Verify authenticator discovery from BitChord
+      - name: Verify authenticator discovery and token requests from BitChord
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         with:
           api-level: 30
-          target: default
+          target: google_apis # The 241017 release ships ARM64-only native libraries.
           arch: x86_64
           ram-size: 2048M
           script: |
             adb install "$RUNNER_TEMP/vanced-microg.apk"
-            bash ./gradlew --max-workers=2 :app:connectedDevDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.music.bitchord.auth.LegacyMicroGDiscoveryTest -Pandroid.testInstrumentationRunnerArguments.verifyLegacyMicroG=true
-      - name: Check the device actually ran the discovery test
+            adb install "$RUNNER_TEMP/microg-241017.apk"
+            bash ./gradlew --max-workers=2 :app:connectedDevDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.package=com.music.bitchord.auth -Pandroid.testInstrumentationRunnerArguments.verifyLegacyMicroG=true
+      - name: Check the device ran the provider and token response tests
         run: |
           python3 - <<'PY'
           from pathlib import Path
           from xml.etree import ElementTree
 
           reports = Path("app/build/outputs/androidTest-results/connected")
-          matches = [
-              test for report in reports.rglob("*.xml")
-              for test in ElementTree.parse(report).iter("testcase")
-              if test.get("classname") == "com.music.bitchord.auth.LegacyMicroGDiscoveryTest"
-          ]
-          if len(matches) != 1 or any(matches[0].find(tag) is not None for tag in ("skipped", "failure", "error")):
-              raise SystemExit("Expected one passing LegacyMicroGDiscoveryTest on the emulator")
+          tests = [test for report in reports.rglob("*.xml") for test in ElementTree.parse(report).iter("testcase")]
+          expected = {
+              "LegacyMicroGDiscoveryTest": {
+                  "discoversInstalledTeamVancedAuthenticatorWithoutAnAccount",
+                  "receivesLegacyTokenServiceErrorForMissingAccount",
+              },
+              "MicroGLegacyGrantResponseTest": {
+                  "readsTokenWithoutOpeningProviderTokenDetails",
+                  "acceptsConsentForTheSelectedAccountAndCallingApp",
+                  "rejectsMissingOrMismatchedAccount",
+                  "rejectsUntrustedOrMismatchedConsent",
+              },
+          }
+          for classname, names in expected.items():
+              matches = [test for test in tests if test.get("classname") == f"com.music.bitchord.auth.{classname}"]
+              if {test.get("name") for test in matches} != names or len(matches) != len(names):
+                  raise SystemExit(f"Missing or unexpected test results for {classname}")
+              if any(test.find(tag) is not None for test in matches for tag in ("skipped", "failure", "error")):
+                  raise SystemExit(f"Expected all {classname} tests to pass")
           PY

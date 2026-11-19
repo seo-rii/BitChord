@@ -33,6 +33,15 @@ class MicroGAuthenticatorTest {
         assertEquals("Vanced microG", provider.copy(versionName = null).displayLabel)
     }
 
+    @Test fun selectsTheDirectTokenServiceOnlyForTheVerifiedMicroGBuild() {
+        val provider = MicroGAuthenticator("app.revanced.android.gms", "app.revanced", "microG Services", "0.3.1.241017")
+        assertTrue(provider.useLegacyTokenService)
+        assertFalse(provider.copy(versionName = "0.3.1.2410170").useLegacyTokenService)
+        assertFalse(provider.copy(versionName = null).useLegacyTokenService)
+        assertFalse(provider.copy(accountType = "com.google").useLegacyTokenService)
+        assertFalse(provider.copy(packageName = "com.google.android.gms").useLegacyTokenService)
+    }
+
     @Test fun legacyConsentWarningIsLimitedToVerifiedReleases() {
         val vanced = MicroGAuthenticator("com.mgoogle.android.gms", "com.mgoogle", "Vanced microG", "0.2.24.220220")
         assertTrue(vanced.lacksKnownConsentFlow)

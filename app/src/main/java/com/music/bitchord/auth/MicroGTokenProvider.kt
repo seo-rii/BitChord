@@ -93,8 +93,13 @@ class MicroGTokenProvider(context: Context, private val account: Account) : YouT
     private suspend fun requestGrant(rejectedToken: String? = null): Bundle =
         awaitMicroGResponse {
             withContext(Dispatchers.IO) {
-                if (account.type !in microGAccountTypes(appContext)) throw IOException("microG account provider unavailable")
+                val owner = microGAuthenticator(appContext, account.type)
+                    ?: throw IOException("microG account provider unavailable")
                 if (rejectedToken != null) manager.invalidateAuthToken(account.type, rejectedToken)
+                if (owner.useLegacyTokenService) {
+                    val grant = requestLegacyMicroGGrant(appContext, owner, account, TOKEN_TYPE)
+                    if (grant != null) return@withContext grant
+                }
                 suspendCancellableCoroutine<Bundle> { continuation ->
                     val callback = AccountManagerCallback<Bundle> { future ->
                         continuation.resumeWith(runCatching { future.result })

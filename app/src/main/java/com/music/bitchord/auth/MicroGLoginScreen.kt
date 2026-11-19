@@ -136,6 +136,8 @@ fun MicroGLoginScreen(
             error = if (authenticator?.lacksKnownConsentFlow == true) {
                 R.string.microg_legacy_timeout
             } else R.string.microg_timeout
+        } catch (_: MicroGLegacyProviderException) {
+            error = R.string.microg_provider_declined
         } catch (_: MicroGResolutionUnavailableException) {
             error = R.string.microg_screen_unavailable
         } catch (_: ActivityNotFoundException) {

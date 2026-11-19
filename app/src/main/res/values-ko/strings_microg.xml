@@ -8,6 +8,7 @@
     <string name="microg_waiting_for_consent">microG에서 계정 재인증이나 YouTube 권한 승인을 마치세요. BitChord로 돌아오면 여기서 결과를 확인할 수 있습니다.</string>
     <string name="microg_check_grant">승인 여부 확인</string>
     <string name="microg_timeout">microG가 30초 안에 토큰 요청에 응답하지 않았습니다. 구버전은 요청 실패를 앱에 알려주지 않을 수 있습니다. microG 자체 네트워크로 Google에 접속할 수 있는지 확인한 뒤 다시 시도하세요.</string>
+    <string name="microg_provider_declined">microG가 응답했지만 이 계정의 YouTube 접근 토큰을 발급하지 못했습니다. microG에서 Google 로그인이 되는지 확인하세요. 로그인이 된다면 앱 개발자가 이 APK의 Android OAuth 등록 정보를 확인해야 합니다.</string>
     <string name="microg_consent_required">microG에서 YouTube 접근 권한을 확인하지 못했습니다. 계정을 다시 선택해 권한을 승인하세요.</string>
     <string name="microg_unavailable">기기에서 microG 계정 서비스를 활성화한 뒤 계정을 다시 선택하세요. BitChord는 microG Services, ReVanced GmsCore, Vanced microG 계정을 인식합니다.</string>
     <string name="microg_authorization_failed">microG에서 이 계정의 권한을 확인할 수 없습니다. 네트워크 연결과 이 APK의 Android OAuth 등록 정보를 확인한 뒤 다시 시도하세요.</string>

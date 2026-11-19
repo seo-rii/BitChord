@@ -1178,8 +1178,9 @@ object Innertube {
         } else {
             session?.clientVersion ?: WEB_REMIX_VERSION
         }
-        val response = withRetry {
-            requestWithToken(tokenProvider) { bearer ->
+        // Retry transport failures only. A provider timeout must return control to the listener.
+        val response = requestWithToken(tokenProvider) { bearer ->
+            withRetry {
                 check(candidate != null || source === credentials) { "The active YouTube account changed" }
                 client.post("$MUSIC_BASE/$endpoint") {
                     contentType(ContentType.Application.Json)

@@ -7,6 +7,7 @@ import io.ktor.client.plugins.ClientRequestException
 import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.get
 import io.ktor.http.Url
+import java.io.IOException
 import kotlinx.coroutines.runBlocking
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -76,8 +77,13 @@ class MicroGRequestTest {
     @Test fun rejectedCandidateKeepsTheActiveAccount() = runBlocking {
         Innertube.cookie = "SAPISID=existing"
         try {
-            val provider = YouTubeTokenProvider { throw IllegalStateException("Grant unavailable") }
+            var lookups = 0
+            val provider = YouTubeTokenProvider {
+                lookups++
+                throw IOException("Grant unavailable")
+            }
             assertTrue(YtMusicRepository.oauthAccount(provider).isFailure)
+            assertEquals(1, lookups)
             assertEquals("SAPISID=existing", Innertube.cookie)
         } finally {
             Innertube.cookie = null

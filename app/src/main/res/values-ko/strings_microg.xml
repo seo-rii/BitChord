@@ -5,11 +5,14 @@
     <string name="microg_account_prompt">microG 계정을 선택하고 BitChord에 YouTube 음악 보관함 관리 권한을 허용하세요. microG는 자체 네트워크 설정을 사용해 Google에 연결합니다.</string>
     <string name="microg_requesting_grant">microG에 YouTube 접근 권한을 요청하는 중…</string>
     <string name="microg_checking_youtube">YouTube Music에서 계정을 확인하는 중…</string>
-    <string name="microg_waiting_for_consent">microG 권한 화면에서 YouTube 접근을 허용하세요. 이미 BitChord로 돌아왔다면 아래에서 승인 여부를 확인할 수 있습니다.</string>
+    <string name="microg_waiting_for_consent">microG에서 계정 재인증이나 YouTube 권한 승인을 마치세요. BitChord로 돌아오면 여기서 결과를 확인할 수 있습니다.</string>
     <string name="microg_check_grant">승인 여부 확인</string>
-    <string name="microg_timeout">microG가 30초 안에 응답하지 않았습니다. microG에서 Google에 연결할 수 있는지 확인한 뒤 다시 시도하세요. BitChord의 WireGuard 프록시는 microG에는 적용되지 않습니다.</string>
+    <string name="microg_timeout">microG가 30초 안에 토큰 요청에 응답하지 않았습니다. 구버전은 요청 실패를 앱에 알려주지 않을 수 있습니다. microG 자체 네트워크로 Google에 접속할 수 있는지 확인한 뒤 다시 시도하세요.</string>
     <string name="microg_consent_required">microG에서 YouTube 접근 권한을 확인하지 못했습니다. 계정을 다시 선택해 권한을 승인하세요.</string>
-    <string name="microg_unavailable">microG Services 또는 ReVanced GmsCore를 설치하거나 활성화한 뒤 계정을 다시 선택하세요.</string>
+    <string name="microg_unavailable">기기에서 microG 계정 서비스를 활성화한 뒤 계정을 다시 선택하세요. BitChord는 microG Services, ReVanced GmsCore, Vanced microG 계정을 인식합니다.</string>
     <string name="microg_authorization_failed">microG에서 이 계정의 권한을 확인할 수 없습니다. 네트워크 연결과 이 APK의 Android OAuth 등록 정보를 확인한 뒤 다시 시도하세요.</string>
     <string name="microg_youtube_failed">YouTube Music에서 이 계정을 확인할 수 없습니다. 네트워크 연결을 확인한 뒤 다시 시도하세요.</string>
+    <string name="microg_screen_unavailable">Android에서 microG가 요청한 계정 화면을 열 수 없습니다. 사용 중인 microG 배포판을 업데이트한 뒤 다시 시도하세요.</string>
+    <string name="microg_legacy_timeout">이 Vanced microG 버전이 토큰을 반환하지 않았습니다. 이 버전에는 새 앱의 권한을 승인하는 화면이 없습니다. 기존 승인이 없다면 YouTube 권한 승인을 지원하는 microG 버전을 사용하세요.</string>
+    <string name="microg_youtube_denied">YouTube Music에서 BitChord의 접근을 거부했습니다. YouTube 권한과 이 앱의 패키지명·서명 인증서에 대한 Android OAuth 등록 정보를 확인하세요.</string>
 </resources>

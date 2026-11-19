@@ -5,7 +5,9 @@ import android.accounts.AccountManager
 import android.accounts.AccountManagerCallback
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Bundle
+import androidx.core.content.IntentCompat
 import androidx.core.os.BundleCompat
 import com.music.bitchord.data.innertube.YouTubeTokenProvider
 import java.io.IOException
@@ -22,11 +24,44 @@ class MicroGTokenProvider(context: Context, private val account: Account) : YouT
     private val initialGrant = AtomicReference<String?>(null)
 
     /** Separate the bounded token request from the time the user spends in the provider's UI. */
-    internal suspend fun prepareAuthorization(): Intent? {
+    internal suspend fun prepareAuthorization(): MicroGResolution? {
         val response = requestGrant()
-        val consent = BundleCompat.getParcelable(response, AccountManager.KEY_INTENT, Intent::class.java)
-        if (consent == null) initialGrant.set(requireToken(response))
-        return consent
+        val intent = BundleCompat.getParcelable(response, AccountManager.KEY_INTENT, Intent::class.java)
+        if (intent == null) {
+            initialGrant.set(requireToken(response))
+            return null
+        }
+        return withContext(Dispatchers.IO) { resolveScreen(intent) }
+    }
+
+    private fun resolveScreen(intent: Intent): MicroGResolution {
+        val target = intent.component ?: throw MicroGResolutionUnavailableException()
+        val owner = microGAuthenticator(appContext, account.type) ?: throw MicroGResolutionUnavailableException()
+        if (intent.selector != null) throw MicroGResolutionUnavailableException()
+
+        // A provider trampoline may contain just a PendingIntent. Preserve it unmodified.
+        val supplied = IntentCompat.getParcelableExtra(intent, "account", Account::class.java)
+        val name = intent.getStringExtra(AccountManager.KEY_ACCOUNT_NAME)
+        val type = intent.getStringExtra(AccountManager.KEY_ACCOUNT_TYPE)
+        if ((supplied != null && supplied != account) || (name != null && name != account.name) ||
+            (type != null && type != account.type)
+        ) throw MicroGResolutionUnavailableException()
+
+        val info = appContext.packageManager.resolveActivity(intent, 0)?.activityInfo
+            ?: throw MicroGResolutionUnavailableException()
+        if (info.packageName != target.packageName || info.name != target.className ||
+            !isExportedMicroGScreen(owner.packageName, info.packageName, info.name, info.exported) ||
+            !info.enabled || !info.applicationInfo.enabled
+        ) throw MicroGResolutionUnavailableException()
+        val permission = info.permission
+        if (permission != null && appContext.checkSelfPermission(permission) != PackageManager.PERMISSION_GRANTED) {
+            throw MicroGResolutionUnavailableException()
+        }
+
+        // Use the real activity (including for an alias). Each fresh trampoline may carry a
+        // different URI or one-shot PendingIntent even when it opens the same consent screen.
+        val id = target.packageName + "/" + (info.targetActivity ?: target.className)
+        return MicroGResolution(intent, id, mayReturnEarly(intent.flags, info.launchMode))
     }
 
     /** Some providers return the grant directly from the consent Activity. */
@@ -34,11 +69,6 @@ class MicroGTokenProvider(context: Context, private val account: Account) : YouT
         val token = data?.extras?.let(::selectedAccountToken) ?: return false
         initialGrant.set(token)
         return true
-    }
-
-    /** Older authenticators report consent through AccountManager only. Probe the grant once. */
-    internal suspend fun finishAuthorization() {
-        initialGrant.set(requireToken(requestGrant()))
     }
 
     override suspend fun getToken(rejectedToken: String?): String {

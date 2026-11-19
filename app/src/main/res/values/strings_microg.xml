@@ -5,11 +5,14 @@
     <string name="microg_account_prompt">Choose a microG account and allow BitChord to manage your YouTube music library. microG connects to Google using its own network settings.</string>
     <string name="microg_requesting_grant">Requesting YouTube access from microG…</string>
     <string name="microg_checking_youtube">Checking the account with YouTube Music…</string>
-    <string name="microg_waiting_for_consent">Approve access in microG. If BitChord is already back on screen, you can check the permission now.</string>
+    <string name="microg_waiting_for_consent">Finish signing in or approving YouTube access in microG. When you return to BitChord, you can check the result here.</string>
     <string name="microg_check_grant">Check permission</string>
-    <string name="microg_timeout">microG did not respond within 30 seconds. Check that microG can reach Google, then try again. If you use BitChord’s WireGuard proxy, microG needs its own connection.</string>
+    <string name="microg_timeout">microG did not answer the token request within 30 seconds. Older versions can leave a failed request unanswered. Check that microG can reach Google using its own network connection, then try again.</string>
     <string name="microg_consent_required">YouTube access still needs approval in microG. Choose the account again to retry.</string>
-    <string name="microg_unavailable">Install or enable microG Services or ReVanced GmsCore, then choose an account again.</string>
+    <string name="microg_unavailable">Enable a microG authenticator on this device, then choose an account again. BitChord recognizes microG Services, ReVanced GmsCore, and Vanced microG.</string>
     <string name="microg_authorization_failed">microG could not authorize this account. Check its network connection and the Android OAuth registration for this APK, then try again.</string>
     <string name="microg_youtube_failed">YouTube Music could not verify this account. Check your connection and try again.</string>
+    <string name="microg_screen_unavailable">Android could not open the account screen provided by microG. Update your installed microG distribution and try again.</string>
+    <string name="microg_legacy_timeout">This Vanced microG version did not return a token. It has no approval screen for a new app. If this account has not already granted access, use a microG version with YouTube authorization support.</string>
+    <string name="microg_youtube_denied">YouTube Music rejected access for BitChord. Check the YouTube permission and the Android OAuth registration for this app and signing certificate.</string>
 </resources>

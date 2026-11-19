@@ -3427,7 +3427,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** Validate the grant independently while the current listener stays active. */
     suspend fun onMicroGAccount(deviceAccount: DeviceAccount, provider: YouTubeTokenProvider): Boolean {
         val account = withTimeoutOrNull(20_000L) {
-            YtMusicRepository.oauthAccount(provider).getOrNull()
+            YtMusicRepository.oauthAccount(provider).getOrThrow()
         } ?: return false
         currentCoroutineContext().ensureActive()
         val profile = YouTubeProfile(

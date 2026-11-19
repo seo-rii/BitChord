@@ -430,11 +430,7 @@ object AppSettings {
     /** Freezes the main player's mesh gradient instead of letting it drift/crossfade. */
     val reduceAnimation = MutableStateFlow(false)
 
-    /**
-     * Whether the welcome pages (party name, then YouTube sign-in) have been
-     * through. Absent rather than true for anyone updating from a build that
-     * had no onboarding, so they get it once too — they have no party name yet.
-     */
+    /** Whether the user finished first-run network setup and the optional account sign-in step. */
     val onboardingComplete = MutableStateFlow(false)
 
     /** Whether the one-time Diwali 2026 greeting has been seen and dismissed. */

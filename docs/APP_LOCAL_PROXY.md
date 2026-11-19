@@ -6,7 +6,7 @@ On first launch, BitChord offers **Find WireGuard .conf file** and **Continue wi
 
 1. Select a WireGuard `.conf` file with the Android document picker.
 2. BitChord validates the file and saves it encrypted in its private, backup-excluded directory. Android Keystore holds the encryption key.
-3. Confirm the restart. BitChord starts the tunnel before initializing its shared network client. The phone welcome then advances to the name step.
+3. Confirm the restart. BitChord starts the tunnel before initializing its shared network client. During phone setup, you can then sign in with microG or skip sign-in.
 
 If the selected profile is missing or the tunnel cannot start, the music client keeps the protected route blocked. Import another profile or choose **Proxy → Off → Apply** and confirm the restart to use the normal connection. Earlier installations with a saved HTTP or SOCKS5 endpoint keep that route until another is selected.
 

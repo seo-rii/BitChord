@@ -5389,9 +5389,6 @@ private fun BitChordApp(
         ) {
             OnboardingScreen(
                 signedIn = signedIn,
-                initialName = remember {
-                    ListenTogether.nickname().ifBlank { account?.name.orEmpty() }
-                },
                 usingDirectConnection = com.music.bitchord.data.Http.configuredRoute.kind ==
                     com.music.bitchord.data.AppProxyKind.DIRECT,
                 onOpenProxySettings = {
@@ -5413,7 +5410,6 @@ private fun BitChordApp(
                         else -> selected != com.music.bitchord.data.AppProxyRoute.FAIL_CLOSED && active == selected
                     }
                 },
-                onNameChosen = ListenTogether::setNickname,
                 onSignIn = { showMicroGLogin = true },
                 onPickWireGuardConf = firstRunConfImport.openConf,
                 confImportError = firstRunConfImport.error,

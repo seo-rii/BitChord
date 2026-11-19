@@ -5,7 +5,7 @@
     <string name="fourpril_onboarding_proxy_intro">Choose a WireGuard .conf file to route BitChord’s music requests through your tunnel.</string>
     <string name="fourpril_continue_without_proxy">Continue without WireGuard</string>
     <string name="fourpril_onboarding_proxy_setup">Set up WireGuard / proxy first</string>
-    <string name="fourpril_onboarding_proxy_restart_hint">After importing, tap OK to restart and continue with your name.</string>
+    <string name="fourpril_onboarding_proxy_restart_hint">After importing the configuration, tap OK to restart BitChord.</string>
     <string name="fourpril_home_proxy_button">Proxy</string>
     <string name="fourpril_proxy_restart_title">Proxy settings saved</string>
     <string name="fourpril_proxy_restart_message">BitChord will restart to apply the proxy settings.</string>

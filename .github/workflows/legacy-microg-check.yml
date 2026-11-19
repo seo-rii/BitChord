@@ -48,7 +48,7 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Verify authenticator discovery and token requests from BitChord
+      - name: Verify phone onboarding and microG token requests
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         with:
           api-level: 30
@@ -56,6 +56,10 @@ jobs:
           arch: x86_64
           ram-size: 2048M
           script: |
+            adb install app/build/outputs/apk/dev/debug/app-dev-x86_64-debug.apk
+            adb shell cmd connectivity airplane-mode enable
+            python3 .github/scripts/test_phone_onboarding.py
+            adb shell cmd connectivity airplane-mode disable
             adb install "$RUNNER_TEMP/vanced-microg.apk"
             adb install "$RUNNER_TEMP/microg-241017.apk"
             bash ./gradlew --max-workers=2 :app:connectedDevDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.package=com.music.bitchord.auth -Pandroid.testInstrumentationRunnerArguments.verifyLegacyMicroG=true
